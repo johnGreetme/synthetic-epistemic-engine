@@ -1,0 +1,35 @@
+# Phase 6: Humanoid Cognitive Deployment
+# Base image: NVIDIA L4T JAX (JetPack 6+)
+# Optimized for Jetson AGX Thor / Orin hardware architectures.
+FROM nvcr.io/nvidia/l4t-jax:r36.2.0-py3
+
+# Set up the engine working directory
+WORKDIR /opt/epistemic_engine
+
+# Install system dependencies required for FAISS and ZeroMQ
+RUN apt-get update && apt-get install -y \
+    libopenblas-dev \
+    libomp-dev \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python requirements
+# Note: JAX and NumPyro are pre-installed in the L4T base image.
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Copy the Synthetic Epistemic Engine codebase
+COPY engine_core.py .
+COPY morphogenesis.py .
+COPY dream_cycle.py .
+COPY certifier_action_space.py .
+COPY swarm.py .
+COPY diana_deployment.py .
+
+# Expose ZeroMQ Swarm ports
+EXPOSE 5577 5578
+
+# The D.I.A.N.A. OS execution entrypoint
+# Running the cognitive node that interfaces with the ROS 2 physical stack
+CMD ["python3", "diana_deployment.py"]

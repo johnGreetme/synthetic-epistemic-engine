@@ -1,0 +1,26 @@
+[Unit]
+Description=D.I.A.N.A. OS Physical Hardware Guillotine Watchdog
+Documentation=https://github.com/synthetic-homeostasis/epistemic-engine
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+# Start the cognitive engine container
+ExecStart=/usr/bin/docker run --rm --runtime=nvidia --ipc=host --network=host --name epistemic_cognition synthetic-homeostasis/l4t-engine:latest
+# If the JAX engine hangs, crashes, or OOMs, this stop command executes
+ExecStop=/usr/bin/docker stop -t 2 epistemic_cognition
+# ARM THE HARDWARE GUILLOTINE ON FAILURE
+# This triggers the D.I.A.N.A. OS low-level microcontroller to sever motor power
+# ensuring absolute physical safety if the cognitive mind faults.
+ExecStopPost=/usr/local/bin/diana-hardware-veto --arm-guillotine
+
+Restart=on-failure
+RestartSec=5s
+
+# Watchdog timeout: if the cognitive mind doesn't ping systemd every 2 seconds, sever power
+WatchdogSec=2s
+
+[Install]
+WantedBy=multi-user.target
