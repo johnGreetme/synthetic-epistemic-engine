@@ -76,6 +76,16 @@ def run_and_export(output_path: str = "debugger_data.json"):
         mu_all  = np.array(params.get("auto_loc",   jnp.array([45.0, 22.5])))
         sig_all = np.array(params.get("auto_scale", jnp.array([2.0, 1.5])))
 
+        # V2 Epistemic Debugger: Dynamic PCA/SVD Projection
+        # Extract the full N-dimensional covariance matrix of the agent's beliefs
+        cov_matrix = jnp.diag(jnp.array(sig_all) ** 2)
+        
+        # Run SVD to find the principal components
+        U, S, Vh = jax.numpy.linalg.svd(cov_matrix)
+        
+        # Map the top 2 principal components to the X and Y axes
+        projection_axes = U[:, :2].tolist()
+
         # Arena mask as list
         mask = [int(agent.arena.mask[i]) for i in range(agent.arena.max_capacity)]
 
@@ -92,6 +102,7 @@ def run_and_export(output_path: str = "debugger_data.json"):
             },
             "posterior_mu":      mu_all.tolist(),
             "posterior_sigma":   sig_all.tolist(),
+            "svd_projection_axes": projection_axes,
             "pain_timer":        agent.sustained_pain_timer,
             "arena_active":      agent.arena.active_count,
             "arena_mask":        mask,
