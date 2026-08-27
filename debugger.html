@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Epistemic Debugger — Synthetic Epistemic Engine</title>
+<meta name="description" content="3D Free Energy landscape visualization for the Synthetic Epistemic Engine">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-card: rgba(16, 16, 28, 0.85);
+  --bg-card-hover: rgba(22, 22, 38, 0.95);
+  --border: rgba(100, 120, 255, 0.12);
+  --border-glow: rgba(100, 120, 255, 0.3);
+  --text-primary: #e8eaff;
+  --text-secondary: #8890b5;
+  --text-dim: #555878;
+  --accent-blue: #4e6bff;
+  --accent-cyan: #00e5ff;
+  --accent-purple: #8b5cf6;
+  --accent-red: #ff3b5c;
+  --accent-green: #00ff88;
+  --accent-amber: #ffb300;
+  --gradient-crisis: linear-gradient(135deg, #ff3b5c, #ff6b00);
+  --gradient-nominal: linear-gradient(135deg, #00e5ff, #4e6bff);
+  --gradient-morph: linear-gradient(135deg, #8b5cf6, #d946ef);
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+#canvas-container {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+}
+
+/* ─── Overlay panels ─── */
+.panel {
+  position: fixed;
+  z-index: 10;
+  backdrop-filter: blur(24px) saturate(1.5);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.panel:hover {
+  border-color: var(--border-glow);
+  box-shadow: 0 0 40px rgba(78, 107, 255, 0.08);
+}
+
+.panel-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-title::before {
+  content: '';
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 8px var(--accent-cyan);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.5; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ─── Header ─── */
+#header {
+  top: 20px; left: 20px; right: 20px;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 12px;
+}
+
+#header h1 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+#status-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 6px 16px;
+  border-radius: 20px;
+  letter-spacing: 1px;
+}
+
+.status-nominal {
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--accent-green);
+  border: 1px solid rgba(0, 255, 136, 0.25);
+}
+
+.status-crisis {
+  background: rgba(255, 59, 92, 0.15);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 59, 92, 0.35);
+  animation: crisis-pulse 1s ease-in-out infinite;
+}
+
+.status-morphogenesis {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-purple);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  animation: morph-glow 1.5s ease-in-out infinite;
+}
+
+@keyframes crisis-pulse {
+  0%, 100% { box-shadow: 0 0 15px rgba(255, 59, 92, 0.2); }
+  50% { box-shadow: 0 0 30px rgba(255, 59, 92, 0.5); }
+}
+
+@keyframes morph-glow {
+  0%, 100% { box-shadow: 0 0 15px rgba(139, 92, 246, 0.2); }
+  50% { box-shadow: 0 0 30px rgba(139, 92, 246, 0.5); }
+}
+
+/* ─── Belief Panel (left) ─── */
+#belief-panel {
+  top: 80px; left: 20px;
+  width: 280px;
+}
+
+.belief-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(100, 120, 255, 0.06);
+}
+
+.belief-row:last-child { border-bottom: none; }
+
+.belief-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+
+.belief-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.belief-value.crisis { color: var(--accent-red); }
+.belief-value.nominal { color: var(--accent-green); }
+
+/* ─── Arena Panel (right) ─── */
+#arena-panel {
+  top: 80px; right: 20px;
+  width: 260px;
+}
+
+#arena-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.arena-cell {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.arena-cell.active {
+  background: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+}
+
+.arena-cell.dormant {
+  background: rgba(50, 50, 80, 0.4);
+  border: 1px solid rgba(100, 120, 255, 0.08);
+}
+
+.arena-cell.spawning {
+  background: var(--accent-purple);
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.6);
+  animation: cell-spawn 0.6s ease-out;
+}
+
+@keyframes cell-spawn {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.3); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ─── Timeline (bottom) ─── */
+#timeline-panel {
+  bottom: 20px; left: 20px; right: 20px;
+  padding: 16px 24px;
+}
+
+#timeline-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+#timeline-scrubber {
+  flex: 1;
+  position: relative;
+  height: 48px;
+  cursor: pointer;
+}
+
+#fe-graph {
+  width: 100%;
+  height: 100%;
+}
+
+#scrubber-handle {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 10px var(--accent-cyan);
+  pointer-events: none;
+  transition: left 0.15s ease;
+}
+
+#tick-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 24px;
+  font-weight: 700;
+  min-width: 64px;
+  text-align: center;
+  color: var(--accent-cyan);
+}
+
+#timeline-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ctrl-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  width: 36px; height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.ctrl-btn:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
+}
+
+.ctrl-btn.active {
+  background: rgba(0, 229, 255, 0.1);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+/* ─── FE Graph bars ─── */
+.fe-bar {
+  fill: rgba(78, 107, 255, 0.6);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  rx: 1;
+}
+
+.fe-bar:hover { fill: var(--accent-cyan); }
+.fe-bar.crisis { fill: rgba(255, 59, 92, 0.7); }
+.fe-bar.morphogenesis { fill: rgba(139, 92, 246, 0.8); }
+.fe-bar.current { fill: var(--accent-cyan); filter: drop-shadow(0 0 6px var(--accent-cyan)); }
+
+/* ─── EIG Panel (left below beliefs) ─── */
+#eig-panel {
+  top: 340px; left: 20px;
+  width: 280px;
+}
+
+#eig-sparkline {
+  width: 100%;
+  height: 60px;
+  margin-top: 8px;
+}
+
+.eig-line {
+  fill: none;
+  stroke: var(--accent-purple);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.5));
+}
+
+.eig-area {
+  fill: url(#eig-gradient);
+  opacity: 0.3;
+}
+
+/* ─── Morphogenesis log ─── */
+#morph-panel {
+  top: 340px; right: 20px;
+  width: 260px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+#morph-panel::-webkit-scrollbar { width: 4px; }
+#morph-panel::-webkit-scrollbar-track { background: transparent; }
+#morph-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.morph-event {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: rgba(139, 92, 246, 0.08);
+  border-left: 2px solid var(--accent-purple);
+  color: var(--text-secondary);
+}
+
+/* ─── Loading ─── */
+#loading {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 100;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  transition: opacity 0.8s ease;
+}
+
+#loading.hidden { opacity: 0; pointer-events: none; }
+
+.loader-ring {
+  width: 48px; height: 48px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#loading-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 3px;
+}
+</style>
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div id="loading">
+  <div class="loader-ring"></div>
+  <div id="loading-text">LOADING BELIEF GEOMETRY</div>
+</div>
+
+<!-- 3D Canvas -->
+<div id="canvas-container"></div>
+
+<!-- Header -->
+<div id="header" class="panel">
+  <h1>EPISTEMIC DEBUGGER</h1>
+  <div id="status-badge" class="status-nominal">NOMINAL</div>
+</div>
+
+<!-- Belief State Panel -->
+<div id="belief-panel" class="panel">
+  <div class="panel-title">Belief State</div>
+  <div class="belief-row">
+    <span class="belief-label">FREE ENERGY</span>
+    <span class="belief-value" id="val-fe">—</span>
+  </div>
+  <div class="belief-row">
+    <span class="belief-label">KL / EIG</span>
+    <span class="belief-value" id="val-eig">—</span>
+  </div>
+  <div class="belief-row">
+    <span class="belief-label">THERMAL μ</span>
+    <span class="belief-value" id="val-thermal-mu">—</span>
+  </div>
+  <div class="belief-row">
+    <span class="belief-label">THERMAL σ</span>
+    <span class="belief-value" id="val-thermal-sigma">—</span>
+  </div>
+  <div class="belief-row">
+    <span class="belief-label">VRAM μ</span>
+    <span class="belief-value" id="val-vram-mu">—</span>
+  </div>
+  <div class="belief-row">
+    <span class="belief-label">VRAM σ</span>
+    <span class="belief-value" id="val-vram-sigma">—</span>
+  </div>
+  <div class="belief-row">
+    <span class="belief-label">PAIN TIMER</span>
+    <span class="belief-value" id="val-pain">—</span>
+  </div>
+</div>
+
+<!-- EIG Sparkline Panel -->
+<div id="eig-panel" class="panel">
+  <div class="panel-title">Expected Information Gain</div>
+  <svg id="eig-sparkline" viewBox="0 0 240 60" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="eig-gradient" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.4"/>
+        <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <path class="eig-area" d=""/>
+    <path class="eig-line" d=""/>
+  </svg>
+</div>
+
+<!-- Arena Panel -->
+<div id="arena-panel" class="panel">
+  <div class="panel-title">Latent Arena</div>
+  <div id="arena-info" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-secondary);margin-bottom:8px;">
+    — / —
+  </div>
+  <div id="arena-grid"></div>
+</div>
+
+<!-- Morphogenesis Log -->
+<div id="morph-panel" class="panel">
+  <div class="panel-title">Morphogenesis Log</div>
+  <div id="morph-log"></div>
+</div>
+
+<!-- Timeline -->
+<div id="timeline-panel" class="panel">
+  <div id="timeline-container">
+    <div id="timeline-controls">
+      <button class="ctrl-btn" id="btn-prev" title="Previous tick">◀</button>
+      <button class="ctrl-btn" id="btn-play" title="Play / Pause">▶</button>
+      <button class="ctrl-btn" id="btn-next" title="Next tick">▶</button>
+    </div>
+    <div id="tick-label">00</div>
+    <div id="timeline-scrubber">
+      <svg id="fe-graph" viewBox="0 0 800 48" preserveAspectRatio="none"></svg>
+      <div id="scrubber-handle" style="left: 0%"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+// ─────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────
+let DATA = null;
+let currentTick = 0;
+let isPlaying = false;
+let playInterval = null;
+
+// Three.js
+let scene, camera, renderer, controls;
+let landscapeMesh, beliefSphere, trailParticles;
+let gridHelper;
+const trailPositions = [];
+
+// ─────────────────────────────────────────────────────────
+// DATA LOADING
+// ─────────────────────────────────────────────────────────
+async function loadData() {
+  try {
+    const res = await fetch('debugger_data.json');
+    DATA = await res.json();
+    init3D();
+    buildTimeline();
+    buildArenaGrid();
+    setTick(0);
+    document.getElementById('loading').classList.add('hidden');
+  } catch (e) {
+    document.getElementById('loading-text').textContent =
+      'ERROR: debugger_data.json not found. Run debugger_export.py first.';
+    console.error(e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// THREE.JS SETUP
+// ─────────────────────────────────────────────────────────
+function init3D() {
+  const container = document.getElementById('canvas-container');
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0a0a0f, 0.012);
+
+  camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(25, 18, 30);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x0a0a0f, 1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  container.appendChild(renderer.domElement);
+
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.3;
+  controls.minDistance = 10;
+  controls.maxDistance = 80;
+
+  // Ambient light
+  scene.add(new THREE.AmbientLight(0x334466, 0.4));
+
+  // Key light
+  const keyLight = new THREE.DirectionalLight(0x4e6bff, 0.8);
+  keyLight.position.set(10, 20, 10);
+  scene.add(keyLight);
+
+  // Rim light
+  const rimLight = new THREE.PointLight(0x8b5cf6, 0.6, 60);
+  rimLight.position.set(-15, 10, -15);
+  scene.add(rimLight);
+
+  // Grid
+  gridHelper = new THREE.GridHelper(40, 40, 0x1a1a2e, 0x1a1a2e);
+  gridHelper.position.y = -2;
+  scene.add(gridHelper);
+
+  // Build Free Energy landscape
+  buildLandscape();
+
+  // Belief sphere (the agent's position in belief space)
+  const sphereGeo = new THREE.SphereGeometry(0.4, 32, 32);
+  const sphereMat = new THREE.MeshStandardMaterial({
+    color: 0x00e5ff,
+    emissive: 0x00e5ff,
+    emissiveIntensity: 0.8,
+    metalness: 0.7,
+    roughness: 0.2,
+  });
+  beliefSphere = new THREE.Mesh(sphereGeo, sphereMat);
+  scene.add(beliefSphere);
+
+  // Trail particles
+  const trailGeo = new THREE.BufferGeometry();
+  const trailMat = new THREE.PointsMaterial({
+    color: 0x4e6bff,
+    size: 0.12,
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  trailParticles = new THREE.Points(trailGeo, trailMat);
+  scene.add(trailParticles);
+
+  // Starfield background
+  const starsGeo = new THREE.BufferGeometry();
+  const starPositions = new Float32Array(3000);
+  for (let i = 0; i < 3000; i++) {
+    starPositions[i] = (Math.random() - 0.5) * 200;
+  }
+  starsGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+  const starsMat = new THREE.PointsMaterial({
+    color: 0x4e6bff,
+    size: 0.15,
+    transparent: true,
+    opacity: 0.3,
+  });
+  scene.add(new THREE.Points(starsGeo, starsMat));
+
+  animate();
+  window.addEventListener('resize', onResize);
+}
+
+function buildLandscape() {
+  // Generate a terrain mesh from FE data
+  const totalTicks = DATA.total_ticks;
+  const width = 30;
+  const depth = 30;
+  const segW = 64;
+  const segD = 64;
+
+  const geo = new THREE.PlaneGeometry(width, depth, segW, segD);
+  geo.rotateX(-Math.PI / 2);
+
+  const positions = geo.attributes.position;
+  const colors = new Float32Array(positions.count * 3);
+  const maxFE = Math.max(...DATA.frames.map(f => f.free_energy), 1);
+
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i);
+    const z = positions.getZ(i);
+
+    // Map x to thermal dimension, z to vram dimension
+    const nx = (x / width + 0.5);
+    const nz = (z / depth + 0.5);
+
+    // Create a Free Energy landscape based on distance from prior means
+    const thermalDist = (nx * 40 + 30) - 45;  // Range ~30-70°C
+    const vramDist = (nz * 40 + 10) - 22.5;   // Range ~10-50 GB
+
+    // FE = quadratic basin around the prior mean
+    let height = (thermalDist * thermalDist * 0.01) + (vramDist * vramDist * 0.008);
+    // Add some Perlin-like noise
+    height += Math.sin(x * 0.5) * Math.cos(z * 0.5) * 0.5;
+
+    positions.setY(i, height);
+
+    // Color gradient: low = deep blue, high = red
+    const t = Math.min(height / 12, 1);
+    colors[i * 3]     = t * 1.0;                    // R
+    colors[i * 3 + 1] = (1 - t) * 0.4 + t * 0.1;   // G
+    colors[i * 3 + 2] = (1 - t) * 0.8;              // B
+  }
+
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    wireframe: false,
+    transparent: true,
+    opacity: 0.65,
+    metalness: 0.3,
+    roughness: 0.5,
+    side: THREE.DoubleSide,
+  });
+
+  landscapeMesh = new THREE.Mesh(geo, mat);
+  scene.add(landscapeMesh);
+
+  // Wireframe overlay
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: 0x2a2a4e,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.15,
+  });
+  const wireMesh = new THREE.Mesh(geo.clone(), wireMat);
+  scene.add(wireMesh);
+}
+
+function updateBeliefPosition(frame) {
+  if (!beliefSphere) return;
+
+  // Map thermal_mu to X, vram_mu to Z
+  const thermalMu = frame.beliefs.thermal_mu;
+  const vramMu = frame.beliefs.vram_mu;
+
+  const x = ((thermalMu - 30) / 40 - 0.5) * 30;
+  const z = ((vramMu - 10) / 40 - 0.5) * 30;
+
+  // FE maps to Y (height on landscape)
+  const fe = frame.free_energy;
+  const y = Math.min(fe / 2000, 15);
+
+  beliefSphere.position.set(x, y + 0.5, z);
+
+  // Color based on state
+  const mat = beliefSphere.material;
+  if (frame.status === 'CRISIS') {
+    mat.color.setHex(0xff3b5c);
+    mat.emissive.setHex(0xff3b5c);
+    mat.emissiveIntensity = 1.2;
+    beliefSphere.scale.setScalar(1.5);
+  } else if (frame.morphogenesis) {
+    mat.color.setHex(0x8b5cf6);
+    mat.emissive.setHex(0x8b5cf6);
+    mat.emissiveIntensity = 1.5;
+    beliefSphere.scale.setScalar(2.0);
+  } else {
+    mat.color.setHex(0x00e5ff);
+    mat.emissive.setHex(0x00e5ff);
+    mat.emissiveIntensity = 0.6;
+    beliefSphere.scale.setScalar(1.0);
+  }
+
+  // Trail
+  trailPositions.push(x, y + 0.5, z);
+  if (trailPositions.length > 300) {
+    trailPositions.splice(0, 3);
+  }
+
+  const trailArr = new Float32Array(trailPositions);
+  trailParticles.geometry.setAttribute(
+    'position', new THREE.BufferAttribute(trailArr, 3)
+  );
+  trailParticles.geometry.attributes.position.needsUpdate = true;
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ─────────────────────────────────────────────────────────
+// TIMELINE
+// ─────────────────────────────────────────────────────────
+function buildTimeline() {
+  const svg = document.getElementById('fe-graph');
+  svg.innerHTML = '';
+
+  const totalTicks = DATA.total_ticks;
+  const maxFE = Math.max(...DATA.frames.map(f => Math.abs(f.free_energy)), 1);
+  const barWidth = 800 / totalTicks - 2;
+
+  DATA.frames.forEach((frame, i) => {
+    const barHeight = Math.max(Math.abs(frame.free_energy) / maxFE * 44, 2);
+    const x = (i / totalTicks) * 800 + 1;
+    const y = 48 - barHeight;
+
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', x);
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', barWidth);
+    rect.setAttribute('height', barHeight);
+    rect.classList.add('fe-bar');
+
+    if (frame.status === 'CRISIS') rect.classList.add('crisis');
+    if (frame.morphogenesis) rect.classList.add('morphogenesis');
+
+    rect.addEventListener('click', () => setTick(i));
+    svg.appendChild(rect);
+  });
+
+  // Scrubber click
+  const scrubber = document.getElementById('timeline-scrubber');
+  scrubber.addEventListener('click', (e) => {
+    const rect = scrubber.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    const tick = Math.round(pct * (DATA.total_ticks - 1));
+    setTick(Math.max(0, Math.min(tick, DATA.total_ticks - 1)));
+  });
+}
+
+function buildArenaGrid() {
+  const grid = document.getElementById('arena-grid');
+  grid.innerHTML = '';
+  for (let i = 0; i < DATA.arena.max_capacity; i++) {
+    const cell = document.createElement('div');
+    cell.classList.add('arena-cell', 'dormant');
+    cell.id = `cell-${i}`;
+    grid.appendChild(cell);
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// TICK UPDATE
+// ─────────────────────────────────────────────────────────
+function setTick(tick) {
+  currentTick = tick;
+  const frame = DATA.frames[tick];
+  if (!frame) return;
+
+  // Status badge
+  const badge = document.getElementById('status-badge');
+  badge.textContent = frame.status;
+  badge.className = 'status-' + frame.status.toLowerCase();
+
+  // Belief values
+  const fe = frame.free_energy;
+  const feEl = document.getElementById('val-fe');
+  feEl.textContent = fe.toFixed(2);
+  feEl.className = 'belief-value ' + (fe > DATA.thresholds.pain ? 'crisis' : 'nominal');
+
+  document.getElementById('val-eig').textContent = frame.eig.toFixed(4);
+  document.getElementById('val-thermal-mu').textContent = frame.beliefs.thermal_mu.toFixed(4) + '°C';
+  document.getElementById('val-thermal-sigma').textContent = frame.beliefs.thermal_sigma.toFixed(4);
+  document.getElementById('val-vram-mu').textContent = frame.beliefs.vram_mu.toFixed(4) + ' GB';
+  document.getElementById('val-vram-sigma').textContent = frame.beliefs.vram_sigma.toFixed(4);
+  document.getElementById('val-pain').textContent =
+    frame.pain_timer + ' / ' + DATA.thresholds.morphogenesis_ticks;
+
+  // Arena grid
+  const mask = frame.arena_mask;
+  const prevMask = tick > 0 ? DATA.frames[tick - 1].arena_mask : mask;
+  for (let i = 0; i < mask.length; i++) {
+    const cell = document.getElementById(`cell-${i}`);
+    if (!cell) continue;
+    cell.className = 'arena-cell';
+    if (mask[i] === 1) {
+      if (prevMask[i] === 0) {
+        cell.classList.add('spawning');
+      } else {
+        cell.classList.add('active');
+      }
+    } else {
+      cell.classList.add('dormant');
+    }
+  }
+
+  document.getElementById('arena-info').textContent =
+    `${frame.arena_active} / ${DATA.arena.max_capacity} active (${((frame.arena_active / DATA.arena.max_capacity) * 100).toFixed(0)}%)`;
+
+  // Tick label
+  document.getElementById('tick-label').textContent =
+    String(tick).padStart(2, '0');
+
+  // Scrubber position
+  document.getElementById('scrubber-handle').style.left =
+    ((tick / (DATA.total_ticks - 1)) * 100) + '%';
+
+  // Highlight current bar
+  document.querySelectorAll('.fe-bar').forEach((bar, i) => {
+    bar.classList.toggle('current', i === tick);
+  });
+
+  // EIG sparkline
+  updateEIGSparkline(tick);
+
+  // Morphogenesis log
+  updateMorphLog(tick);
+
+  // 3D
+  updateBeliefPosition(frame);
+}
+
+function updateEIGSparkline(upToTick) {
+  const frames = DATA.frames.slice(0, upToTick + 1);
+  if (frames.length < 2) return;
+
+  const width = 240;
+  const height = 60;
+  const maxEIG = Math.max(...DATA.frames.map(f => f.eig), 0.001);
+
+  let linePath = '';
+  let areaPath = `M 0 ${height}`;
+
+  frames.forEach((f, i) => {
+    const x = (i / (DATA.total_ticks - 1)) * width;
+    const y = height - (f.eig / maxEIG) * (height - 4);
+    linePath += (i === 0 ? 'M' : 'L') + ` ${x} ${y}`;
+    areaPath += ` L ${x} ${y}`;
+  });
+
+  const lastX = ((frames.length - 1) / (DATA.total_ticks - 1)) * width;
+  areaPath += ` L ${lastX} ${height} Z`;
+
+  document.querySelector('.eig-line').setAttribute('d', linePath);
+  document.querySelector('.eig-area').setAttribute('d', areaPath);
+}
+
+function updateMorphLog(upToTick) {
+  const log = document.getElementById('morph-log');
+  log.innerHTML = '';
+
+  DATA.frames.forEach((f, i) => {
+    if (i > upToTick) return;
+    if (!f.morphogenesis) return;
+    const div = document.createElement('div');
+    div.classList.add('morph-event');
+    div.innerHTML = `<strong>TICK ${String(i).padStart(2, '0')}</strong> — 🧠 Neurogenesis → Arena ${f.arena_active}/${DATA.arena.max_capacity}`;
+    log.appendChild(div);
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// PLAYBACK CONTROLS
+// ─────────────────────────────────────────────────────────
+document.getElementById('btn-prev').addEventListener('click', () => {
+  if (currentTick > 0) setTick(currentTick - 1);
+});
+
+document.getElementById('btn-next').addEventListener('click', () => {
+  if (currentTick < DATA.total_ticks - 1) setTick(currentTick + 1);
+});
+
+document.getElementById('btn-play').addEventListener('click', () => {
+  isPlaying = !isPlaying;
+  const btn = document.getElementById('btn-play');
+  btn.textContent = isPlaying ? '⏸' : '▶';
+  btn.classList.toggle('active', isPlaying);
+
+  if (isPlaying) {
+    if (currentTick >= DATA.total_ticks - 1) setTick(0);
+    playInterval = setInterval(() => {
+      if (currentTick < DATA.total_ticks - 1) {
+        setTick(currentTick + 1);
+      } else {
+        isPlaying = false;
+        btn.textContent = '▶';
+        btn.classList.remove('active');
+        clearInterval(playInterval);
+      }
+    }, 800);
+  } else {
+    clearInterval(playInterval);
+  }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') setTick(Math.max(0, currentTick - 1));
+  if (e.key === 'ArrowRight') setTick(Math.min(DATA.total_ticks - 1, currentTick + 1));
+  if (e.key === ' ') {
+    e.preventDefault();
+    document.getElementById('btn-play').click();
+  }
+});
+
+// ─────────────────────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
