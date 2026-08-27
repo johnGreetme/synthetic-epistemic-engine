@@ -25,23 +25,40 @@ from engine_core import initialize_engine, PAIN_THRESHOLD
 from certifier_action_space import StateLockedProtocol_Firewall, EpistemicCertifier
 from morphogenesis import MorphogeneticAgent, MAX_ARENA_CAPACITY, INITIAL_CAPACITY
 
+USE_REAL_ROS = False
+
+if USE_REAL_ROS:
+    try:
+        import rclpy
+        from rclpy.node import Node
+        from std_msgs.msg import String
+    except ImportError:
+        print("[ROS 2 ERROR] rclpy not found. Ensure ROS 2 is sourced.")
+        USE_REAL_ROS = False
+
 
 class MockROS2Node:
     """Mocks an rclpy Node for simulation purposes."""
     def __init__(self, node_name: str):
         self.node_name = node_name
         self.publishers = {}
-        print(f"[ROS 2] Node '{self.node_name}' initialized.")
+        print(f"[ROS 2 MOCK] Node '{self.node_name}' initialized.")
 
     def create_publisher(self, topic: str):
         self.publishers[topic] = True
-        print(f"[ROS 2] Publisher created on topic: {topic}")
+        print(f"[ROS 2 MOCK] Publisher created on topic: {topic}")
 
     def publish(self, topic: str, msg: Dict[str, Any]):
         if topic in self.publishers:
             print(f"  [ROS 2 PUBLISH -> {topic}] {msg}")
         else:
             print(f"  [ROS 2 ERROR] Topic {topic} not registered.")
+
+def get_ros_node(node_name: str):
+    if USE_REAL_ROS:
+        rclpy.init()
+        return rclpy.create_node(node_name)
+    return MockROS2Node(node_name)
 
 
 class CognitiveMindNode:
@@ -50,9 +67,13 @@ class CognitiveMindNode:
     """
     def __init__(self):
         # 1. Hardware Bridge (ROS 2)
-        self.ros_node = MockROS2Node("epistemic_cognition_core")
+        self.ros_node = get_ros_node("epistemic_cognition_core")
         self.pub_intent = "/diana/verified_intent"
-        self.ros_node.create_publisher(self.pub_intent)
+        
+        if USE_REAL_ROS:
+            self.publisher_ = self.ros_node.create_publisher(String, self.pub_intent, 10)
+        else:
+            self.ros_node.create_publisher(self.pub_intent)
 
         # 2. Epistemic Engine Core
         self.svi, _ = initialize_engine(beta=1.5)
@@ -104,7 +125,13 @@ class CognitiveMindNode:
 
             if is_safe:
                 print(f"  [D.I.A.N.A] ✅ Action VERIFIED SAFE. Token: {token}. Publishing to motor controllers.")
-                self.ros_node.publish(self.pub_intent, proposed_action)
+                if USE_REAL_ROS:
+                    import json
+                    msg = String()
+                    msg.data = json.dumps(proposed_action)
+                    self.publisher_.publish(msg)
+                else:
+                    self.ros_node.publish(self.pub_intent, proposed_action)
             else:
                 print(f"  [D.I.A.N.A] ❌ Action VETOED: {reason}")
                 print(f"  [DREAM QUEUE] Routing vetoed intent to latent sandbox for nightly synthesis.")
