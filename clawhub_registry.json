@@ -1,0 +1,30 @@
+[
+  {
+    "skill_id": "c044feb2",
+    "node_id": "queen-ada",
+    "delta": {
+      "mutation_id": "d2c04405-a83c-41f8-bbaa-b384b80f5857",
+      "slot_index": 4,
+      "weight_dim": 8,
+      "weight_b64": "+UzduwlTIzxLECC79/4qPGa9CLyi9kI7GIF/vN3HMbo=",
+      "anomaly_telemetry": {
+        "temp": 65.0,
+        "vram_usage": 44.0
+      },
+      "anomaly_vector": [
+        65.0,
+        44.0,
+        25.952239990234375,
+        20.0,
+        21.5,
+        0.519044816493988
+      ],
+      "pre_morph_fe": 25952.240234375,
+      "post_morph_fe": 24328.755859375,
+      "fe_reduction": 1623.484375,
+      "timestamp": 1787851224.4303842
+    },
+    "resin_text": "skill MorphogeneticImmuneResponse {\n  version:      \"1.0.0\"\n  skill_id:     \"c044feb2\"\n  author_node:  \"queen-ada\"\n  created_at:   1787851224\n\n  // What sensory pattern triggers this skill\n  trigger {\n    sensor:     \"telemetry.thermal_vram_matrix\"\n    condition:  \"free_energy > 20761.8\"\n    temp_range: [60.0, 70.0]\n    vram_range: [39.0, 49.0]\n  }\n\n  // The structural topology patch\n  topology_patch {\n    action:      \"activate_latent_slot\"\n    slot_index:  4\n    weight_dim:  8\n    weight_b64:  \"+UzduwlTIzxLECC79/4qPGa9CLyi9kI7GIF/vN3H...\"\n  }\n\n  // Validation \u2014 Forager must verify FE drops after applying\n  validation {\n    expected_fe_reduction:   1623.48\n    min_fe_reduction_pct:    6.3\n    max_stabilization_ticks: 10\n  }\n}",
+    "created_at": 1787851224.430418
+  }
+]
