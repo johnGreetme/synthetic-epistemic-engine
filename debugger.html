@@ -59,10 +59,32 @@
     .morph-marker { position: absolute; top: 0; height: 100%; width: 3px; background: #fff; box-shadow: 0 0 8px #fff; }
 
     /* Morph Event Overlay */
-    #morph-alert { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.2s; }
+    #morph-alert { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 20;}
     #morph-alert.visible { opacity: 1; }
     #morph-alert h1 { font-size: 4rem; color: #fff; text-shadow: 0 0 30px #fff; margin: 0; text-transform: uppercase; letter-spacing: 0.2em; }
     #morph-alert p { font-family: 'JetBrains Mono'; color: var(--cyan); font-size: 1.2rem; }
+
+    /* Onboarding Modal */
+    #onboarding { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    .onboarding-content { background: var(--panel-bg); border: 1px solid var(--glass-border); border-radius: 12px; padding: 3rem; max-width: 600px; color: var(--text); }
+    .onboarding-content h2 { color: var(--cyan); margin-top: 0; font-size: 2rem; text-transform: uppercase; letter-spacing: 0.1em; }
+    .onboarding-content p { line-height: 1.6; font-size: 1.1rem; color: #ccc; }
+    .onboarding-content ul { padding-left: 1.5rem; }
+    .onboarding-content li { margin-bottom: 1rem; line-height: 1.5; color: #ccc; }
+    .onboarding-btn { background: var(--cyan); color: #000; border: none; padding: 1rem 2rem; font-size: 1.2rem; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 2rem; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.1em;}
+    .onboarding-btn:hover { background: #fff; box-shadow: 0 0 15px var(--cyan); }
+
+    /* Legend */
+    #legend { position: absolute; top: 2rem; right: 2rem; z-index: 15; width: 280px; }
+    .legend-item { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 1rem; font-size: 0.85rem; color: #ccc; line-height: 1.4; }
+    .legend-icon { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+    .icon-cyan { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+    .icon-crimson { background: var(--crimson); box-shadow: 0 0 8px var(--crimson); }
+    .icon-white { background: #fff; box-shadow: 0 0 8px #fff; }
+    
+    /* Help Button */
+    #btn-help { position: absolute; bottom: 2rem; right: 2rem; z-index: 15; background: var(--panel-bg); border: 1px solid var(--glass-border); color: #fff; width: 50px; height: 50px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; transition: 0.2s; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);}
+    #btn-help:hover { background: rgba(255,255,255,0.1); border-color: var(--cyan); color: var(--cyan); }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -112,6 +134,38 @@
   <div id="morph-alert">
     <h1>MORPHOGENESIS</h1>
     <p>SVD Topological Projection Realigned. Dimensional Fabric Expanded.</p>
+  </div>
+  
+  <div class="panel" id="legend">
+    <div class="header-title" style="font-size: 1.1rem; margin-bottom: 1rem;">Topology Legend</div>
+    <div class="legend-item">
+      <div class="legend-icon icon-cyan"></div>
+      <div><strong>The Sovereign Agent</strong><br>Belief state when in Homeostasis (low Free Energy).</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-icon icon-crimson"></div>
+      <div><strong>Epistemic Crisis</strong><br>Agent experiences extreme uncertainty (pain threshold breached).</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-icon icon-white"></div>
+      <div><strong>Orthogonal Tear</strong><br>Morphogenesis occurs. The SVD projection recalculates as a new spatial dimension is born.</div>
+    </div>
+  </div>
+  
+  <button id="btn-help">?</button>
+
+  <div id="onboarding">
+    <div class="onboarding-content">
+      <h2>The Sovereign Mind</h2>
+      <p>Welcome to the Epistemic Debugger V2. You are looking at a dynamic, 3D projection of the agent's internal mathematical beliefs.</p>
+      <ul>
+        <li><strong>The Terrain</strong> is the Free Energy landscape, dynamically warped by the agent's probability variance (SVD projection).</li>
+        <li><strong>The Glowing Orb</strong> is the agent's current location in that landscape.</li>
+        <li><strong>The Scrubber</strong> at the bottom allows you to travel through time to see <i>why</i> the agent made a decision.</li>
+      </ul>
+      <p>Scrub to a massive spike (Crisis) to watch the fabric of the terrain visually shatter as the agent invents a new neural dimension to survive.</p>
+      <button class="onboarding-btn" id="btn-start">Enter the Void</button>
+    </div>
   </div>
 
   <div class="panel timeline-panel">
@@ -602,6 +656,15 @@ document.getElementById('btn-play').addEventListener('click', () => {
   } else {
     clearInterval(playInterval);
   }
+});
+
+// UI Modal toggles
+document.getElementById('btn-start').addEventListener('click', () => {
+  document.getElementById('onboarding').style.display = 'none';
+});
+
+document.getElementById('btn-help').addEventListener('click', () => {
+  document.getElementById('onboarding').style.display = 'flex';
 });
 
 loadData();
