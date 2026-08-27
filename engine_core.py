@@ -20,7 +20,7 @@ import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
-from numpyro.infer import SVI, Trace_ELBO
+from numpyro.infer import SVI, Trace_ELBO, init_to_mean
 from numpyro.infer.autoguide import AutoDiagonalNormal
 import numpyro.optim as optim
 
@@ -191,8 +191,16 @@ def epistemic_model(telemetry=None):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def initialize_engine(beta: float = 1.5):
-    """Bootstrap the SVI engine with the Epistemic objective."""
-    guide     = AutoDiagonalNormal(epistemic_model)
+    """
+    Bootstrap the SVI engine with the Epistemic objective.
+
+    init_to_mean warm-starts the guide's auto_loc at each latent variable's
+    prior mean (e.g. 45.0°C for true_thermal) rather than at zero.
+    This ensures the initial KL divergence is near 0 and the loss is
+    meaningful from tick 1 — the agent begins from a sensible belief, not
+    from a state of total ignorance.
+    """
+    guide     = AutoDiagonalNormal(epistemic_model, init_loc_fn=init_to_mean)
     optimizer = optim.Adam(step_size=0.01)
     svi       = SVI(epistemic_model, guide, optimizer,
                     loss=EpistemicTraceELBO(beta=beta))
@@ -237,8 +245,11 @@ def extract_belief_snapshot(svi, svi_state) -> dict:
 # Boot Loop
 # ─────────────────────────────────────────────────────────────────────────────
 
-PAIN_THRESHOLD = 150.0       # Free Energy above this triggers crisis response
-CURIOSITY_FLOOR = 0.5        # EIG below this means the agent is "bored" / stagnant
+# After warm-start initialisation the baseline loss sits near 5–30 depending
+# on how well the observations match the priors. A threshold of 200 gives
+# comfortable headroom before the crisis flag fires.
+PAIN_THRESHOLD  = 200.0      # Free Energy above this triggers crisis response
+CURIOSITY_FLOOR = 0.01       # KL/EIG below this means the agent is stagnant
 
 
 def boot_engine(beta: float = 1.5, ticks: int = 10):
