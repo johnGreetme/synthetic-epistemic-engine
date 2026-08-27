@@ -22,7 +22,7 @@ import threading
 from typing import Dict, Any
 
 from engine_core import initialize_engine, PAIN_THRESHOLD
-from certifier_action_space import DianaOS_Firewall, EpistemicCertifier
+from certifier_action_space import StateLockedProtocol_Firewall, EpistemicCertifier
 from morphogenesis import MorphogeneticAgent, MAX_ARENA_CAPACITY, INITIAL_CAPACITY
 
 
@@ -65,8 +65,8 @@ class CognitiveMindNode:
             initial_capacity=INITIAL_CAPACITY
         )
 
-        # 4. D.I.A.N.A OS Certifier
-        self.firewall = DianaOS_Firewall()
+        # 4. State-Locked Protocol (Kytin SLP) Certifier
+        self.firewall = StateLockedProtocol_Firewall()
 
         # 5. Dream Cycle Queue (Unresolved/Vetoed anomalies)
         self.dream_queue = []
@@ -100,13 +100,12 @@ class CognitiveMindNode:
             print(f"  [INTENT GENERATED] {proposed_action}")
 
             # Verify action through D.I.A.N.A OS physical firewall
-            is_safe = self.firewall.evaluate_action(proposed_action)
+            is_safe, reason, token = self.firewall.evaluate_action(proposed_action)
 
             if is_safe:
-                print(f"  [D.I.A.N.A] ✅ Action VERIFIED SAFE. Publishing to motor controllers.")
+                print(f"  [D.I.A.N.A] ✅ Action VERIFIED SAFE. Token: {token}. Publishing to motor controllers.")
                 self.ros_node.publish(self.pub_intent, proposed_action)
             else:
-                reason = "Violates physical constraints (NO_PHYSICAL_HARM / NO_HARDWARE_OVERVOLTAGE)"
                 print(f"  [D.I.A.N.A] ❌ Action VETOED: {reason}")
                 print(f"  [DREAM QUEUE] Routing vetoed intent to latent sandbox for nightly synthesis.")
                 self.dream_queue.append({

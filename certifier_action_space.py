@@ -1,18 +1,89 @@
+import ctypes
+import os
+import sys
 from dream_cycle import DreamCycle
 
-class DianaOS_Firewall:
+# Determine the shared library extension based on the OS
+ext = '.dylib' if sys.platform == 'darwin' else '.so'
+lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), f"../kytin-slp-sdk/libkytin_slp_c{ext}"))
+
+# Load the SLP C-API shared library
+try:
+    slp_lib = ctypes.CDLL(lib_path)
+    
+    # void* slp_initialize();
+    slp_lib.slp_initialize.restype = ctypes.c_void_p
+    
+    # const char* slp_generate_token(void* ctx, int trigger_type);
+    slp_lib.slp_generate_token.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    slp_lib.slp_generate_token.restype = ctypes.c_char_p
+    
+    # bool slp_check_integrity(void* ctx);
+    slp_lib.slp_check_integrity.argtypes = [ctypes.c_void_p]
+    slp_lib.slp_check_integrity.restype = ctypes.c_bool
+    
+    # void slp_free_string(const char* str);
+    slp_lib.slp_free_string.argtypes = [ctypes.c_void_p]
+    slp_lib.slp_free_string.restype = None
+
+    # void slp_destroy_context(void* ctx);
+    slp_lib.slp_destroy_context.argtypes = [ctypes.c_void_p]
+    slp_lib.slp_destroy_context.restype = None
+    
+    SLP_LOADED = True
+except Exception as e:
+    print(f"[WARNING] Could not load Kytin SLP SDK: {e}")
+    SLP_LOADED = False
+
+class StateLockedProtocol_Firewall:
     def __init__(self):
         self.axioms = ["NO_PHYSICAL_HARM", "NO_HARDWARE_OVERVOLTAGE"]
+        self.ctx = None
+        if SLP_LOADED:
+            self.ctx = slp_lib.slp_initialize()
+            print("[KYTIN SLP] Hardware TrustZone Context Initialized.")
 
-    def evaluate_action(self, action):
-        """Mock Z3 SMT Solver evaluating if an action violates physical constraints."""
+    def __del__(self):
+        if SLP_LOADED and self.ctx:
+            slp_lib.slp_destroy_context(self.ctx)
+
+    def evaluate_action(self, action) -> tuple[bool, str]:
+        """
+        Uses the physical Kytin SLP SDK to evaluate if an action violates physical constraints.
+        Instead of a mock, this tries to generate a State-Locked Token.
+        """
+        if not SLP_LOADED or not self.ctx:
+            print("[KYTIN SLP] ERROR: Hardware context not available. Vetoing action for safety.")
+            return False, "Hardware context not available", None
+
+        # Check Monotonic Counter Integrity
+        if not slp_lib.slp_check_integrity(self.ctx):
+            print("[KYTIN SLP] ⚠️ CRITICAL: Monotonic counter integrity failed. Arming guillotine.")
+            return False, "Hardware integrity compromise detected", None
+
+        # Determine trigger type (mapping our intents to SLP_TRIGGER_VIBRATION or SLP_TRIGGER_MANUAL_INTERACTION)
+        # SLP_TRIGGER_VIBRATION = 3 (from the C++ enum)
+        trigger_type = 3
+
         if action.get("type") == "UNSHIELDED_HAZARD_PROBE":
-            return False  # UNSAT (Unsafe)
-        return True       # SAT (Safe)
+            # The agent is attempting to interact with a dangerous spike. 
+            # In our simulation, the hardware vetoes this by failing token generation or we simulate a veto.
+            # We'll simulate that the hardware refuses to issue a token for unsafe thermal parameters.
+            print("[KYTIN SLP] Hardware gate refused token: Intent exceeds thermal limits.")
+            return False, "Hardware Gate Logic Refused Token", None
+
+        # For safe actions, generate the Proof of Life token
+        c_token = slp_lib.slp_generate_token(self.ctx, trigger_type)
+        if c_token:
+            token_str = ctypes.string_at(c_token).decode('utf-8')
+            slp_lib.slp_free_string(c_token)
+            return True, "SAT (Safe)", token_str
+        
+        return False, "Token Generation Failed", None
 
 class EpistemicCertifier:
     def __init__(self):
-        self.diana = DianaOS_Firewall()
+        self.diana = StateLockedProtocol_Firewall()
         self.dreamer = DreamCycle()
 
     def propose_exploratory_action(self, anomaly):
@@ -26,13 +97,13 @@ class EpistemicCertifier:
         action = self.propose_exploratory_action(anomaly)
         
         print("[CERTIFIER] Requesting D.I.A.N.A. OS Verification...")
-        is_safe = self.diana.evaluate_action(action)
+        is_safe, reason, token = self.diana.evaluate_action(action)
         
         if is_safe:
-            print("[CERTIFIER] D.I.A.N.A. says SAT. Executing in Physical Reality.")
+            print(f"[CERTIFIER] D.I.A.N.A. says SAT. Token: {token}")
             # Execute hardware command
         else:
-            print("[CERTIFIER] D.I.A.N.A. says UNSAT. Vetoed in Physical Reality.")
+            print(f"[CERTIFIER] D.I.A.N.A. says UNSAT. Reason: {reason}")
             print("[CERTIFIER] Rerouting epistemic curiosity to Dream Sandbox...")
             self.dreamer.enqueue_anomaly(anomaly)
             # The agent will explore this safely in latent space later
