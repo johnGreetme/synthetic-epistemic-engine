@@ -18,8 +18,6 @@ SEE transforms passive sensors into sovereign, self-resolving nodes. By combinin
 
 Industry is attempting to achieve Artificial General Intelligence (AGI) through brute-force scale—burning megawatts of datacenter power to simulate what biological neural systems accomplish on **20 watts**. Piling on clusters of GPUs to refine a statistical next-token guessing game will never yield true, autonomous cyber-physical intelligence.
 
-To build something fundamentally new, one does not compete on brute-force scale. **One competes on architecture.**
-
 ### The Paradigm Shift: From Passive Prediction to Continuous Active Inference
 
 The **Synthetic Epistemic Engine (SEE)** abandons passive prompt-response mechanics in favor of a **Continuous Active Inference Substrate**:
@@ -102,17 +100,6 @@ SEE is designed to bridge probabilistic edge AI with deterministic physical hard
 *   **The Forager Node (Edge/Drone):** Powered by the **NVIDIA Jetson AGX Thor**. Runs the SVI nociception engine, processes real-time telemetry, and clamps physical actuators into Limp Mode if the network drops.
 *   **The Queen Node (Cluster Brain):** Powered by the **NVIDIA RTX 6000 Ada Generation**. Handles heavy LLM causal morphogenesis, mathematically verifies `.resin` mutations via the Z3 Crucible, and broadcasts cryptographic signatures.
 *   **The Hardware Interlock:** Integrates via USB/UART with hardware security modules (e.g., Lilygo T-Dongle S3) and flight controllers (e.g., Pixhawk) to act as a physical guillotine, executing Apoptosis if spoofed telemetry is detected.
-
----
-
-## System Boundaries: What SEE Does NOT Do
-
-To clearly demarcate where SEE sits within the autonomous robotics stack:
-
-* **It is NOT a Chatbot or Generic Prompt Wrapper:** SEE is an embodied cyber-physical cognitive substrate. It does not generate conversational text for end-users; it outputs verifiable kinematic trajectories and compliance/impedance matrices.
-* **It does NOT Interfere with 500–1000 Hz Real-Time Joint Control:** SEE does not replace microsecond-level motor commutation, ESC timing, or 1 kHz Whole-Body Control (WBC) balance loops. High-frequency joint stabilization remains untouched in the real-time RTOS/microcontroller layer (e.g., STM32, Pixhawk, PREEMPT_RT). SEE sits above as the asynchronous cognitive supervisor, injecting verified impedance parameters and kinematic bounds without introducing latency jitter or risking humanoid balance loss.
-* **It does NOT Permit Blind LLM Actuation:** Large Language Models in SEE are strictly confined to the DreamSandbox subconscious simulator. An LLM cannot command a physical motor directly without passing through the deterministic Z3 formal proof gate.
-* **It does NOT Rely on Cloud Backhauls for Safety:** Every edge Forager node carries its own sovereign Z3 Crucible and local FAISS immune registry. If communication to the Queen is severed, the edge node relies on local verification and Limp Mode retreat rather than stalling or crashing.
 
 ---
 
