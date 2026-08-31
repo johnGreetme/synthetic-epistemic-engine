@@ -7,8 +7,6 @@ Implements asynchronous ZeroMQ network transport primitives:
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple, Union
-
 import zmq
 
 ZMQ_FORAGER_TO_QUEEN: str = "tcp://127.0.0.1:5577"
@@ -23,7 +21,7 @@ class MeshTransport:
 
     def __init__(
         self,
-        context: Optional[zmq.Context] = None,
+        context: zmq.Context | None = None,
         ingress_addr: str = ZMQ_FORAGER_TO_QUEEN,
         egress_addr: str = ZMQ_QUEEN_BROADCAST,
     ) -> None:
@@ -31,7 +29,7 @@ class MeshTransport:
         self.ingress_addr = ingress_addr
         self.egress_addr = egress_addr
 
-    def create_queen_sockets(self) -> Tuple[zmq.Socket, zmq.Socket]:
+    def create_queen_sockets(self) -> tuple[zmq.Socket, zmq.Socket]:
         """Binds Queen Ingress (PULL) and Egress (PUB) sockets."""
         pull_sock = self.context.socket(zmq.PULL)
         pull_sock.bind(self.ingress_addr)
@@ -42,8 +40,8 @@ class MeshTransport:
         return pull_sock, pub_sock
 
     def create_forager_sockets(
-        self, topics: Optional[List[bytes]] = None
-    ) -> Tuple[zmq.Socket, zmq.Socket]:
+        self, topics: list[bytes] | None = None
+    ) -> tuple[zmq.Socket, zmq.Socket]:
         """Connects Forager Egress (PUSH) and Ingress (SUB) sockets."""
         push_sock = self.context.socket(zmq.PUSH)
         push_sock.connect(self.ingress_addr)
@@ -58,16 +56,14 @@ class MeshTransport:
         return push_sock, sub_sock
 
     @staticmethod
-    def send_broadcast(
-        pub_socket: zmq.Socket, topic: bytes, payload_bytes: bytes
-    ) -> None:
+    def send_broadcast(pub_socket: zmq.Socket, topic: bytes, payload_bytes: bytes) -> None:
         """Publishes a multipart message to subscribers."""
         pub_socket.send_multipart([topic, payload_bytes])
 
     @staticmethod
     def poll_and_recv(
         socket: zmq.Socket, timeout_ms: int = 100
-    ) -> Optional[Union[str, Tuple[bytes, bytes]]]:
+    ) -> str | tuple[bytes, bytes] | None:
         """Polls socket and receives single or multipart message."""
         if socket.poll(timeout_ms):
             if socket.type == zmq.SUB:

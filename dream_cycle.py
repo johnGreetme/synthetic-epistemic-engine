@@ -42,31 +42,31 @@ Four Components:
     4. WakeIntegrationProtocol — validated insights merged back to waking model
 """
 
-import sqlite3
-import json
-import time
-import jax
-import jax.numpy as jnp
-import numpy as np
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import List, Optional, Dict, Any
+from __future__ import annotations
 
+import json
+import sqlite3
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
+import jax
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 
-JOURNAL_PATH        = "dream_journal.db"
-SIGMA_INFLATION     = 5.0
-MAX_DREAM_TICKS     = 20
+JOURNAL_PATH = "dream_journal.db"
+SIGMA_INFLATION = 5.0
+MAX_DREAM_TICKS = 20
 FE_RESOLUTION_FLOOR = 50.0
-INTEGRATION_WEIGHT  = 0.3
+INTEGRATION_WEIGHT = 0.3
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Anomaly Journal  (SQLite Persistence Layer)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class Anomaly:
@@ -77,15 +77,16 @@ class Anomaly:
     sustained ticks and Morphogenesis fires but does not fully resolve
     the contradiction (FE remains elevated after neurogenesis).
     """
-    id:           int
-    tick:         int
-    free_energy:  float
-    telemetry:    Dict[str, float]
-    belief_mu:    List[float]
-    belief_sigma: List[float]
-    resolved:     bool = False
-    dream_fe:     float = 0.0
-    timestamp:    float = field(default_factory=time.time)
+
+    id: int
+    tick: int
+    free_energy: float
+    telemetry: dict[str, float]
+    belief_mu: list[float]
+    belief_sigma: list[float]
+    resolved: bool = False
+    dream_fe: float = 0.0
+    timestamp: float = field(default_factory=time.time)
 
 
 class AnomalyJournal:
@@ -118,19 +119,29 @@ class AnomalyJournal:
             """)
             conn.commit()
 
-    def log_anomaly(self, tick: int, free_energy: float,
-                    telemetry: Dict, belief_mu: List, belief_sigma: List) -> int:
+    def log_anomaly(
+        self, tick: int, free_energy: float, telemetry: dict, belief_mu: list, belief_sigma: list
+    ) -> int:
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 INSERT INTO anomalies
                     (tick, free_energy, telemetry, belief_mu, belief_sigma, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (tick, free_energy, json.dumps(telemetry),
-                  json.dumps(belief_mu), json.dumps(belief_sigma), time.time()))
+            """,
+                (
+                    tick,
+                    free_energy,
+                    json.dumps(telemetry),
+                    json.dumps(belief_mu),
+                    json.dumps(belief_sigma),
+                    time.time(),
+                ),
+            )
             conn.commit()
             return cursor.lastrowid
 
-    def get_unresolved(self) -> List[Anomaly]:
+    def get_unresolved(self) -> list[Anomaly]:
         with sqlite3.connect(self.db_path) as conn:
             rows = conn.execute("""
                 SELECT id, tick, free_energy, telemetry, belief_mu,
@@ -139,10 +150,17 @@ class AnomalyJournal:
                 ORDER BY free_energy DESC
             """).fetchall()
         return [
-            Anomaly(id=r[0], tick=r[1], free_energy=r[2],
-                    telemetry=json.loads(r[3]), belief_mu=json.loads(r[4]),
-                    belief_sigma=json.loads(r[5]), resolved=bool(r[6]),
-                    dream_fe=r[7], timestamp=r[8])
+            Anomaly(
+                id=r[0],
+                tick=r[1],
+                free_energy=r[2],
+                telemetry=json.loads(r[3]),
+                belief_mu=json.loads(r[4]),
+                belief_sigma=json.loads(r[5]),
+                resolved=bool(r[6]),
+                dream_fe=r[7],
+                timestamp=r[8],
+            )
             for r in rows
         ]
 
@@ -150,21 +168,23 @@ class AnomalyJournal:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 "UPDATE anomalies SET resolved = 1, dream_fe = ? WHERE id = ?",
-                (dream_fe, anomaly_id)
+                (dream_fe, anomaly_id),
             )
             conn.commit()
 
-    def summary(self) -> Dict[str, int]:
+    def summary(self) -> dict[str, int]:
         with sqlite3.connect(self.db_path) as conn:
-            total    = conn.execute("SELECT COUNT(*) FROM anomalies").fetchone()[0]
-            resolved = conn.execute(
-                "SELECT COUNT(*) FROM anomalies WHERE resolved = 1").fetchone()[0]
+            total = conn.execute("SELECT COUNT(*) FROM anomalies").fetchone()[0]
+            resolved = conn.execute("SELECT COUNT(*) FROM anomalies WHERE resolved = 1").fetchone()[
+                0
+            ]
         return {"total": total, "resolved": resolved, "pending": total - resolved}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Prior Relaxation Protocol  (Entering the Void)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class PriorRelaxationProtocol:
     """
@@ -181,15 +201,19 @@ class PriorRelaxationProtocol:
     def __init__(self, inflation_factor: float = SIGMA_INFLATION):
         self.inflation_factor = inflation_factor
 
-    def relax(self, params: Dict) -> Dict:
+    def relax(self, params: dict) -> dict:
         """Inflate sigma to enter the unconstrained dream space."""
         relaxed = dict(params)
         if "auto_scale" in relaxed:
             relaxed["auto_scale"] = relaxed["auto_scale"] * self.inflation_factor
         return relaxed
 
-    def restore(self, dream_params: Dict, waking_params: Dict,
-                integration_weight: float = INTEGRATION_WEIGHT) -> Dict:
+    def restore(
+        self,
+        dream_params: dict,
+        waking_params: dict,
+        integration_weight: float = INTEGRATION_WEIGHT,
+    ) -> dict:
         """
         Blend dream-resolved parameters back into the waking model.
         restored = (1 - w) * waking + w * dream
@@ -205,6 +229,7 @@ class PriorRelaxationProtocol:
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Sandbox Simulation Arena  (Unconstrained Dream Space)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class SandboxSimulationArena:
     """
@@ -223,13 +248,11 @@ class SandboxSimulationArena:
     """
 
     def __init__(self, svi, relaxation: PriorRelaxationProtocol):
-        self.svi        = svi
+        self.svi = svi
         self.relaxation = relaxation
-        self.rng_key    = jax.random.PRNGKey(int(time.time()) + 1)
+        self.rng_key = jax.random.PRNGKey(int(time.time()) + 1)
 
-    def simulate(self, anomaly: Anomaly,
-                 waking_svi_state,
-                 morphogenetic_agent) -> Dict[str, Any]:
+    def simulate(self, anomaly: Anomaly, waking_svi_state, morphogenetic_agent) -> dict[str, Any]:
         """
         Replay an anomaly in the unconstrained dream space.
 
@@ -240,23 +263,23 @@ class SandboxSimulationArena:
             4. Allow free neurogenesis every 4 ticks (no pain timer)
             5. Measure final FE — return dream results
         """
-        print(f"\n  ╔{'═'*54}╗")
+        print(f"\n  ╔{'═' * 54}╗")
         print(f"  ║  💤 DREAM — Anomaly ID {anomaly.id:<30}║")
-        print(f"  ║  Waking FE: {anomaly.free_energy:<10.2f}  "
-              f"Heartbeat: {anomaly.telemetry.get('slp_heartbeat', '?')}{'':<14}║")
-        print(f"  ╚{'═'*54}╝")
+        print(
+            f"  ║  Waking FE: {anomaly.free_energy:<10.2f}  "
+            f"Heartbeat: {anomaly.telemetry.get('slp_heartbeat', '?')}{'':<14}║"
+        )
+        print(f"  ╚{'═' * 54}╝")
 
         # Clone and relax
         self.rng_key, subkey = jax.random.split(self.rng_key)
-        dream_state          = self.svi.init(subkey, telemetry=anomaly.telemetry)
+        dream_state = self.svi.init(subkey, telemetry=anomaly.telemetry)
 
-        fe_history         = []
+        fe_history = []
         neurogenesis_count = 0
 
         for dream_tick in range(MAX_DREAM_TICKS):
-            dream_state, dream_fe = self.svi.update(
-                dream_state, telemetry=anomaly.telemetry
-            )
+            dream_state, dream_fe = self.svi.update(dream_state, telemetry=anomaly.telemetry)
             fe_history.append(float(dream_fe))
 
             # Free neurogenesis (no pain timer — we are dreaming)
@@ -267,10 +290,12 @@ class SandboxSimulationArena:
                 neurogenesis_count += 1
 
             status_str = "✓ RESOLVED" if float(dream_fe) < FE_RESOLUTION_FLOOR else "  searching..."
-            print(f"    Dream tick {dream_tick+1:02d} | "
-                  f"FE: {float(dream_fe):>10.2f} | "
-                  f"Nodes: {morphogenetic_agent.arena.active_count}/{morphogenetic_agent.arena.max_capacity} | "
-                  f"{status_str}")
+            print(
+                f"    Dream tick {dream_tick + 1:02d} | "
+                f"FE: {float(dream_fe):>10.2f} | "
+                f"Nodes: {morphogenetic_agent.arena.active_count}/{morphogenetic_agent.arena.max_capacity} | "
+                f"{status_str}"
+            )
 
             if float(dream_fe) < FE_RESOLUTION_FLOOR:
                 break
@@ -278,64 +303,71 @@ class SandboxSimulationArena:
         final_fe = fe_history[-1]
         resolved = final_fe < FE_RESOLUTION_FLOOR
 
-        print(f"\n  {'✅ DREAM RESOLVED' if resolved else '⚠️  DREAM PARTIAL'} "
-              f"— Final FE: {final_fe:.2f} | "
-              f"Neurogenesis events: {neurogenesis_count}")
+        print(
+            f"\n  {'✅ DREAM RESOLVED' if resolved else '⚠️  DREAM PARTIAL'} "
+            f"— Final FE: {final_fe:.2f} | "
+            f"Neurogenesis events: {neurogenesis_count}"
+        )
 
         return {
-            "resolved":           resolved,
-            "final_fe":           final_fe,
-            "initial_fe":         anomaly.free_energy,
-            "fe_reduction":       anomaly.free_energy - final_fe,
+            "resolved": resolved,
+            "final_fe": final_fe,
+            "initial_fe": anomaly.free_energy,
+            "fe_reduction": anomaly.free_energy - final_fe,
             "neurogenesis_count": neurogenesis_count,
-            "dream_state":        dream_state,
-            "dream_params":       self.svi.get_params(dream_state),
-            "fe_history":         fe_history,
+            "dream_state": dream_state,
+            "dream_params": self.svi.get_params(dream_state),
+            "fe_history": fe_history,
         }
 
     def simulate_generative_bypass(self, initial_fe: float):
         """
-        Simulates the LLM discovering the low-stiffness, high-leverage bypass 
+        Simulates the LLM discovering the low-stiffness, high-leverage bypass
         after hitting the Z3 mathematical firewall.
         """
-        print(f"\n  ╔{'═'*65}╗")
-        print(f"  ║  💤 GENERATIVE BYPASS DREAM — Resolving Obstacle           ║")
+        print(f"\n  ╔{'═' * 65}╗")
+        print("  ║  💤 GENERATIVE BYPASS DREAM — Resolving Obstacle           ║")
         print(f"  ║  Waking FE: {initial_fe:<10.2f}                                      ║")
-        print(f"  ╚{'═'*65}╝")
-        
+        print(f"  ╚{'═' * 65}╝")
+
         current_fe = initial_fe
-        
+
         # Tick 1: Brute Force
         print("\n  [DREAM TICK 1] LLM Proposes: {torque: 25.0, stiffness: 1000.0, radius: 0.12}")
         print("    ↳ [Z3 CRUCIBLE] ❌ UNSAT. Axiom Violated: torque <= 5.0")
         print("    ↳ [SIMULATOR] Action blocked. Free Energy remains high.")
         print(f"      FE: {current_fe:.2f}")
         time.sleep(1.0)
-        
+
         # Tick 2: Compliance Stalling
         print("\n  [DREAM TICK 2] LLM Proposes: {torque: 5.0, stiffness: 1000.0, radius: 0.12}")
         print("    ↳ [Z3 CRUCIBLE] 🛡️ SAT.")
-        print("    ↳ [SIMULATOR] Action executed. Actuator stalled against obstacle. Insufficient leverage/compliance.")
-        current_fe = current_fe * 0.9 # Slight drop but still high
+        print(
+            "    ↳ [SIMULATOR] Action executed. Actuator stalled against obstacle. Insufficient leverage/compliance."
+        )
+        current_fe = current_fe * 0.9  # Slight drop but still high
         print(f"      FE: {current_fe:.2f}")
         time.sleep(1.0)
-        
+
         # Tick 3: The Morphogenetic Breakthrough
         print("\n  [DREAM TICK 3] LLM Proposes: {torque: 4.8, stiffness: 50.0, radius: 0.20}")
         print("    ↳ [Z3 CRUCIBLE] 🛡️ SAT.")
-        print("    ↳ [SIMULATOR] Action executed. Low stiffness absorbs static friction. High leverage generates sufficient force.")
+        print(
+            "    ↳ [SIMULATOR] Action executed. Low stiffness absorbs static friction. High leverage generates sufficient force."
+        )
         print("    ↳ [SIMULATOR] Obstacle bypassed. Homeostasis restored.")
         current_fe = 0.0
         print(f"      FE: {current_fe:.2f}")
         time.sleep(1.0)
-        
-        print(f"\n  ✅ BYPASS DISCOVERED. Generating .resin skill patch...")
+
+        print("\n  ✅ BYPASS DISCOVERED. Generating .resin skill patch...")
         return {"resolved": True, "final_fe": current_fe, "fe_reduction": initial_fe - current_fe}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Wake Integration Protocol
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class WakeIntegrationProtocol:
     """
@@ -348,31 +380,28 @@ class WakeIntegrationProtocol:
     """
 
     def __init__(self, svi, relaxation: PriorRelaxationProtocol):
-        self.svi        = svi
+        self.svi = svi
         self.relaxation = relaxation
 
-    def integrate(self, dream_result: Dict[str, Any],
-                  waking_svi_state) -> Optional[Dict]:
+    def integrate(self, dream_result: dict[str, Any], waking_svi_state) -> dict | None:
         if not dream_result["resolved"]:
             print("  [WAKE] Dream unresolved. Waking state unchanged.")
             return None
 
-        fe_reduction    = dream_result["fe_reduction"]
-        initial_fe      = dream_result["initial_fe"]
-        adaptive_weight = min(
-            INTEGRATION_WEIGHT * (fe_reduction / max(initial_fe, 1.0)), 0.5
-        )
+        fe_reduction = dream_result["fe_reduction"]
+        initial_fe = dream_result["initial_fe"]
+        adaptive_weight = min(INTEGRATION_WEIGHT * (fe_reduction / max(initial_fe, 1.0)), 0.5)
 
-        waking_params     = self.svi.get_params(waking_svi_state)
-        dream_params      = dream_result["dream_params"]
+        waking_params = self.svi.get_params(waking_svi_state)
+        dream_params = dream_result["dream_params"]
         integrated_params = self.relaxation.restore(
             dream_params, waking_params, integration_weight=adaptive_weight
         )
 
-        delta_mu    = float(integrated_params["auto_loc"][0]   - waking_params["auto_loc"][0])
+        delta_mu = float(integrated_params["auto_loc"][0] - waking_params["auto_loc"][0])
         delta_sigma = float(integrated_params["auto_scale"][0] - waking_params["auto_scale"][0])
 
-        print(f"\n  [WAKE] ✅ Dream insight integrated:")
+        print("\n  [WAKE] ✅ Dream insight integrated:")
         print(f"         FE reduction:       {fe_reduction:,.2f}")
         print(f"         Integration weight: {adaptive_weight:.4f}")
         print(f"         Δμ (desire):        {delta_mu:+.6f}")
@@ -385,6 +414,7 @@ class WakeIntegrationProtocol:
 # Dream Cycle Orchestrator
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class DreamCycle:
     """
     Top-level orchestrator coordinating all four dream cycle components.
@@ -395,26 +425,30 @@ class DreamCycle:
     """
 
     def __init__(self, svi, db_path: str = JOURNAL_PATH):
-        self.svi         = svi
-        self.journal     = AnomalyJournal(db_path)
-        self.relaxation  = PriorRelaxationProtocol()
+        self.svi = svi
+        self.journal = AnomalyJournal(db_path)
+        self.relaxation = PriorRelaxationProtocol()
         self.integration = WakeIntegrationProtocol(svi, self.relaxation)
-        self.is_docked   = False
+        self.is_docked = False
         self.dream_count = 0
 
-    def log_waking_anomaly(self, tick: int, free_energy: float,
-                           telemetry: Dict, belief_snapshot: Dict) -> int:
-        mu    = [belief_snapshot["beliefs"]["true_nothingness"]["mu"],
-                 belief_snapshot["beliefs"]["innate_desire"]["mu"],
-                 belief_snapshot["beliefs"]["true_motion"]["mu"],
-                 belief_snapshot["beliefs"]["suppressed_suffering"]["mu"]]
-        sigma = [belief_snapshot["beliefs"]["true_nothingness"]["sigma"],
-                 belief_snapshot["beliefs"]["innate_desire"]["sigma"],
-                 belief_snapshot["beliefs"]["true_motion"]["sigma"],
-                 belief_snapshot["beliefs"]["suppressed_suffering"]["sigma"]]
+    def log_waking_anomaly(
+        self, tick: int, free_energy: float, telemetry: dict, belief_snapshot: dict
+    ) -> int:
+        mu = [
+            belief_snapshot["beliefs"]["true_nothingness"]["mu"],
+            belief_snapshot["beliefs"]["innate_desire"]["mu"],
+            belief_snapshot["beliefs"]["true_motion"]["mu"],
+            belief_snapshot["beliefs"]["suppressed_suffering"]["mu"],
+        ]
+        sigma = [
+            belief_snapshot["beliefs"]["true_nothingness"]["sigma"],
+            belief_snapshot["beliefs"]["innate_desire"]["sigma"],
+            belief_snapshot["beliefs"]["true_motion"]["sigma"],
+            belief_snapshot["beliefs"]["suppressed_suffering"]["sigma"],
+        ]
         anomaly_id = self.journal.log_anomaly(tick, free_energy, telemetry, mu, sigma)
-        print(f"  [JOURNAL] ✍️  Anomaly #{anomaly_id} logged "
-              f"(FE={free_energy:.1f}, tick={tick})")
+        print(f"  [JOURNAL] ✍️  Anomaly #{anomaly_id} logged (FE={free_energy:.1f}, tick={tick})")
         return anomaly_id
 
     def run(self, waking_svi_state, morphogenetic_agent) -> Any:
@@ -426,8 +460,7 @@ class DreamCycle:
 
         print("\n" + "=" * 60)
         print("  DREAM CYCLE INITIATED")
-        print(f"  Docked: {self.is_docked} | "
-              f"Pending anomalies: {summary['pending']}")
+        print(f"  Docked: {self.is_docked} | Pending anomalies: {summary['pending']}")
         print("=" * 60)
 
         if not self.is_docked:
@@ -438,13 +471,15 @@ class DreamCycle:
             print("  [DREAM] No unresolved anomalies. Resting in the void.")
             return waking_svi_state
 
-        anomalies     = self.journal.get_unresolved()
-        sandbox       = SandboxSimulationArena(self.svi, self.relaxation)
+        anomalies = self.journal.get_unresolved()
+        sandbox = SandboxSimulationArena(self.svi, self.relaxation)
         current_state = waking_svi_state
 
         for anomaly in anomalies:
-            print(f"\n  Processing anomaly #{anomaly.id} "
-                  f"(FE={anomaly.free_energy:.1f} from tick {anomaly.tick})")
+            print(
+                f"\n  Processing anomaly #{anomaly.id} "
+                f"(FE={anomaly.free_energy:.1f} from tick {anomaly.tick})"
+            )
 
             dream_result = sandbox.simulate(anomaly, current_state, morphogenetic_agent)
 
@@ -459,8 +494,10 @@ class DreamCycle:
             time.sleep(0.05)
 
         final_summary = self.journal.summary()
-        print(f"\n  [DREAM COMPLETE] "
-              f"Resolved {final_summary['resolved']}/{final_summary['total']} anomalies")
+        print(
+            f"\n  [DREAM COMPLETE] "
+            f"Resolved {final_summary['resolved']}/{final_summary['total']} anomalies"
+        )
 
         return current_state
 
@@ -470,9 +507,10 @@ class DreamCycle:
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    from engine_core   import initialize_engine, extract_belief_snapshot, PAIN_THRESHOLD
-    from morphogenesis import MorphogeneticAgent, MAX_ARENA_CAPACITY, INITIAL_CAPACITY
     import os
+
+    from engine_core import PAIN_THRESHOLD, extract_belief_snapshot, initialize_engine
+    from morphogenesis import INITIAL_CAPACITY, MAX_ARENA_CAPACITY, MorphogeneticAgent
 
     if os.path.exists(JOURNAL_PATH):
         os.remove(JOURNAL_PATH)
@@ -483,12 +521,11 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Boot waking systems
-    svi, guide   = initialize_engine(beta=1.5)
-    rng_key      = jax.random.PRNGKey(0)
-    svi_state    = svi.init(rng_key, telemetry={"slp_heartbeat": 8.0, "sensory_flux": 6.4})
-    agent        = MorphogeneticAgent(max_capacity=MAX_ARENA_CAPACITY,
-                                      initial_capacity=INITIAL_CAPACITY)
-    dream_cycle  = DreamCycle(svi)
+    svi, guide = initialize_engine(beta=1.5)
+    rng_key = jax.random.PRNGKey(0)
+    svi_state = svi.init(rng_key, telemetry={"slp_heartbeat": 8.0, "sensory_flux": 6.4})
+    agent = MorphogeneticAgent(max_capacity=MAX_ARENA_CAPACITY, initial_capacity=INITIAL_CAPACITY)
+    dream_cycle = DreamCycle(svi)
 
     print("\n[PHASE 3A] Simulating waking day — logging anomalies...\n")
 
@@ -496,21 +533,21 @@ if __name__ == "__main__":
         {"slp_heartbeat": 8.1, "sensory_flux": 6.5},
         {"slp_heartbeat": 8.2, "sensory_flux": 6.6},
         {"slp_heartbeat": 8.0, "sensory_flux": 6.4},
-        {"slp_heartbeat": 10.0, "sensory_flux": 0.0},   # Vampire Drain Crisis 1
-        {"slp_heartbeat": 10.5, "sensory_flux": 0.0},   # Vampire Drain Crisis 1 escalating
-        {"slp_heartbeat": 10.2, "sensory_flux": 0.0},   # Vampire Drain Crisis 1 sustained
-        {"slp_heartbeat": 8.3, "sensory_flux": 6.7},    # Recovery
+        {"slp_heartbeat": 10.0, "sensory_flux": 0.0},  # Vampire Drain Crisis 1
+        {"slp_heartbeat": 10.5, "sensory_flux": 0.0},  # Vampire Drain Crisis 1 escalating
+        {"slp_heartbeat": 10.2, "sensory_flux": 0.0},  # Vampire Drain Crisis 1 sustained
+        {"slp_heartbeat": 8.3, "sensory_flux": 6.7},  # Recovery
         {"slp_heartbeat": 8.1, "sensory_flux": 6.5},
-        {"slp_heartbeat": 12.0, "sensory_flux": 0.0},   # Vampire Drain Crisis 2
-        {"slp_heartbeat": 12.5, "sensory_flux": 0.0},   # Vampire Drain Crisis 2 escalating
-        {"slp_heartbeat": 8.0, "sensory_flux": 6.4},    # End of day
+        {"slp_heartbeat": 12.0, "sensory_flux": 0.0},  # Vampire Drain Crisis 2
+        {"slp_heartbeat": 12.5, "sensory_flux": 0.0},  # Vampire Drain Crisis 2 escalating
+        {"slp_heartbeat": 8.0, "sensory_flux": 6.4},  # End of day
     ]
 
     for tick, telemetry in enumerate(WAKING_SCENARIOS):
         svi_state, total_loss = svi.update(svi_state, telemetry=telemetry)
-        snapshot              = extract_belief_snapshot(svi, svi_state)
-        fe                    = float(total_loss)
-        in_crisis             = fe > PAIN_THRESHOLD
+        snapshot = extract_belief_snapshot(svi, svi_state)
+        fe = float(total_loss)
+        in_crisis = fe > PAIN_THRESHOLD
 
         agent.update(fe, pain_threshold=PAIN_THRESHOLD)
 
@@ -518,8 +555,10 @@ if __name__ == "__main__":
             dream_cycle.log_waking_anomaly(tick, fe, telemetry, snapshot)
 
         status = "⚠️  CRISIS" if in_crisis else "NOMINAL  "
-        print(f"  Tick {tick:02d} | FE: {fe:>10.2f} | {status} | "
-              f"Arena: {agent.arena.active_count}/{agent.arena.max_capacity}")
+        print(
+            f"  Tick {tick:02d} | FE: {fe:>10.2f} | {status} | "
+            f"Arena: {agent.arena.active_count}/{agent.arena.max_capacity}"
+        )
 
     js = dream_cycle.journal.summary()
     print(f"\n[DAY COMPLETE] {js['pending']} anomalies logged to dream journal.")
@@ -534,18 +573,20 @@ if __name__ == "__main__":
 
     # Wake report
     final_snapshot = extract_belief_snapshot(svi, svi_state)
-    print(f"\n[WAKE] Agent returned from Dream Cycle.")
-    print(f"  Desire belief: μ={final_snapshot['beliefs']['innate_desire']['mu']:.4f}  "
-          f"σ={final_snapshot['beliefs']['innate_desire']['sigma']:.4f}")
+    print("\n[WAKE] Agent returned from Dream Cycle.")
+    print(
+        f"  Desire belief: μ={final_snapshot['beliefs']['innate_desire']['mu']:.4f}  "
+        f"σ={final_snapshot['beliefs']['innate_desire']['sigma']:.4f}"
+    )
     print(f"  EIG (curiosity):  {final_snapshot['eig']:.4f}")
     print(f"  Arena: {agent.arena}")
-    
+
     # Generative Bypass Simulation
     print("\n" + "─" * 60)
     print("[PHASE 3C] Generative Bypass Dream (Z3 + LLM Simulation)")
     print("─" * 60)
-    
+
     sandbox = SandboxSimulationArena(svi, dream_cycle.relaxation)
     bypass_result = sandbox.simulate_generative_bypass(initial_fe=758.26)
-    
-    print(f"\n[ENGINE] Phase 3 complete. Agent ready for Phase 4 (Swarm).\n")
+
+    print("\n[ENGINE] Phase 3 complete. Agent ready for Phase 4 (Swarm).\n")

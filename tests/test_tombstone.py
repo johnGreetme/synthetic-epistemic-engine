@@ -1,10 +1,10 @@
 """Unit tests for the Ed25519 Tombstone Protocol and Forager Apoptosis."""
 
 import pytest
-from see.nodes.queen_node import QueenNode
-from see.nodes.forager_node import ForagerNode
-from see.immunity.apoptosis import ApoptosisManager
+
 from see.mesh.crypto_enclave import CryptoEnclave
+from see.nodes.forager_node import ForagerNode
+from see.nodes.queen_node import QueenNode
 
 
 def test_queen_detects_spoofed_fe_and_initiates_tombstone():
@@ -16,9 +16,9 @@ def test_queen_detects_spoofed_fe_and_initiates_tombstone():
     # Impossible physical claims
     spoofed_payload = {
         "node_id": "captured-node",
-        "pre_morph_fe": 150000.0,      # > 100,000 max bound
+        "pre_morph_fe": 150000.0,  # > 100,000 max bound
         "post_morph_fe": 10.0,
-        "fe_reduction": 149990.0,      # > 50,000 max bound
+        "fe_reduction": 149990.0,  # > 50,000 max bound
     }
 
     envelope = attacker_enclave.wrap_payload(spoofed_payload)

@@ -1,5 +1,11 @@
 # Synthetic Epistemic Engine (SEE)
 
+[![CI](https://github.com/johnGreetme/synthetic-epistemic-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/johnGreetme/synthetic-epistemic-engine/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python: >=3.10](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/)
+[![Architecture: diana-os-core Verified Submodule](https://img.shields.io/badge/Architecture-diana--os--core%20Verified%20Submodule-success)](https://github.com/johnGreetme/diana-os-core)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 A biologically-inspired, decentralized, zero-trust robotic swarm intelligence that implements **Active Inference**, **Causal Morphogenesis**, **LLM DreamSandbox Verification**, **Metabolic ZeroMQ Gossipsub**, and the **Ed25519 Tombstone Protocol**.
 
 SEE builds upon the immutable `diana-os-core` formal verification microkernel.
@@ -14,13 +20,13 @@ SEE builds upon the immutable `diana-os-core` formal verification microkernel.
    - Sustained Free Energy $> 500.0$ over 3 consecutive ticks triggers `PAIN_THRESHOLD_EXCEEDED` to initiate neurogenesis.
 
 2. **DreamSandbox & Z3 Crucible (`see.dream_sandbox`)**:
-   - Dynamic submodule adapter linking to `diana_core` (or `diana-os-core`).
+   - Dynamic submodule adapter linking to `diana_core` formal verification microkernel.
    - Dynamic extraction of `unsat_core()` when kinematic constraints or torque limits are violated, returning structured semantic bounding boxes for LLM re-prompting.
    - Pre-allocated `LatentArena` enabling zero-JIT-recompile structural mutation.
 
 3. **Metabolic Triage & ZeroMQ Mesh (`see.mesh`)**:
    - Ingress: `zmq.PUSH` (Foragers) -> `zmq.PULL` (Queen) on port `5577`.
-   - Metabolic Triage Priority Queue sorting by `(-pre_morph_fe, arrival_timestamp, payload)`.
+   - Metabolic Triage Priority Queue sorting by `(-pre_morph_fe, arrival_timestamp, payload)` with explicit tie-breaking.
    - Egress: `zmq.PUB` (Queen) -> `zmq.SUB` (Foragers) on port `5578` broadcasting `RESIN_SKILL` and `TOMBSTONE`.
    - Zero-trust Ed25519 cryptographic enclaves for all message envelopes.
 
@@ -38,7 +44,12 @@ SEE builds upon the immutable `diana-os-core` formal verification microkernel.
 
 ```text
 synthetic-epistemic-engine/
-├── .gitmodules
+├── .github/
+│   ├── ISSUE_TEMPLATE/          # Structured Bug Report & Feature Request templates
+│   ├── workflows/               # CI/CD (Multi-Python matrix, releases)
+│   └── PULL_REQUEST_TEMPLATE.md # Standard PR checklist
+├── .gitmodules                  # Submodule tracking diana-os-core
+├── .pre-commit-config.yaml      # Code quality & formatting hooks
 ├── diana_core/                  # Git submodule tracking diana-os-core
 ├── see/
 │   ├── __init__.py
@@ -67,14 +78,36 @@ synthetic-epistemic-engine/
 │   ├── test_crucible_unsat.py
 │   ├── test_zmq_triage.py
 │   └── test_tombstone.py
-├── pyproject.toml
-└── README.md
+├── CHANGELOG.md                 # Semantic versioning history
+├── CODE_OF_CONDUCT.md           # Contributor Covenant v2.1
+├── CONTRIBUTING.md              # Developer setup & contribution guidelines
+├── LICENSE                      # Apache 2.0 License
+├── pyproject.toml               # Package build configuration & tool settings
+├── README.md
+└── SECURITY.md                  # Vulnerability disclosure policy
 ```
 
 ---
 
-## Running the Test Suite
+## Quickstart & Testing
 
+### Installation
 ```bash
-python3 -m pytest tests/ -v
+# Clone recursively to include the diana_core submodule
+git clone --recursive https://github.com/johnGreetme/synthetic-epistemic-engine.git
+cd synthetic-epistemic-engine
+
+# Install package in editable mode with development dependencies
+pip install -e ".[dev]"
+```
+
+### Running Tests
+```bash
+pytest tests/ -v
+```
+
+### Code Formatting & Linting
+```bash
+ruff check .
+ruff format --check .
 ```

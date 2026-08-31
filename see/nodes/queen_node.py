@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any
 
 import numpy as np
 import zmq
@@ -43,7 +43,7 @@ class QueenNode:
         bind_zmq: bool = True,
         ingress_addr: str = ZMQ_FORAGER_TO_QUEEN,
         egress_addr: str = ZMQ_QUEEN_BROADCAST,
-        registry_path: Optional[str] = None,
+        registry_path: str | None = None,
     ) -> None:
         self.node_id = node_id
         self.bind_zmq = bind_zmq
@@ -66,8 +66,8 @@ class QueenNode:
         self.triage_queue = MetabolicTriageQueue()
 
         # Access Control & Blacklists
-        self.authorized_foragers: Dict[str, str] = {}  # pubkey -> node_id
-        self.revoked_keys: Set[str] = set()
+        self.authorized_foragers: dict[str, str] = {}  # pubkey -> node_id
+        self.revoked_keys: set[str] = set()
 
         # Counters
         self.validated_count: int = 0
@@ -75,13 +75,13 @@ class QueenNode:
         self.spoofed_count: int = 0
 
         # Networking & Threads
-        self.context: Optional[zmq.Context] = None
-        self.pull_sock: Optional[zmq.Socket] = None
-        self.pub_sock: Optional[zmq.Socket] = None
+        self.context: zmq.Context | None = None
+        self.pull_sock: zmq.Socket | None = None
+        self.pub_sock: zmq.Socket | None = None
 
         self._running = False
-        self._listener_thread: Optional[threading.Thread] = None
-        self._worker_thread: Optional[threading.Thread] = None
+        self._listener_thread: threading.Thread | None = None
+        self._worker_thread: threading.Thread | None = None
 
         if self.bind_zmq:
             self._init_zmq()
@@ -170,7 +170,7 @@ class QueenNode:
         except Exception:
             return False
 
-    def validate_mutation(self, delta: Dict[str, Any]) -> Tuple[str, str]:
+    def validate_mutation(self, delta: dict[str, Any]) -> tuple[str, str]:
         """Validates Free Energy physics drop and guards against telemetry spoofing.
 
         Returns:
@@ -178,9 +178,7 @@ class QueenNode:
         """
         pre_fe = float(delta.get("pre_morph_fe", 0.0))
         post_fe = float(delta.get("post_morph_fe", 0.0))
-        fe_reduction = float(
-            delta.get("fe_reduction", pre_fe - post_fe)
-        )
+        fe_reduction = float(delta.get("fe_reduction", pre_fe - post_fe))
 
         # Physics Anti-Spoofing Check
         if fe_reduction > PHYSICS_MAX_FE_REDUCTION or pre_fe > PHYSICS_MAX_PRE_FE:
@@ -193,8 +191,8 @@ class QueenNode:
         return "INVALID", f"INSUFFICIENT_FE_DROP: {pct_drop:.4f} < {FE_VALIDATION_DROP_PCT}"
 
     def process_next_triage_task(
-        self, block: bool = False, timeout: Optional[float] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, block: bool = False, timeout: float | None = None
+    ) -> dict[str, Any] | None:
         """Pops highest pain task, validates, checks Eureka collisions, and broadcasts skills."""
         if self.triage_queue.empty() and not block:
             return None
@@ -228,13 +226,17 @@ class QueenNode:
                 )
 
             fe_red = float(delta.get("fe_reduction", 0.0))
-            is_accepted, eureka_reason, existing_skill = (
-                self.registry.evaluate_eureka_collision(anomaly_vec, fe_red)
+            is_accepted, eureka_reason, existing_skill = self.registry.evaluate_eureka_collision(
+                anomaly_vec, fe_red
             )
 
             if not is_accepted:
                 self.rejected_count += 1
-                return {"status": "REJECTED_EUREKA_COLLISION", "reason": eureka_reason, "delta": delta}
+                return {
+                    "status": "REJECTED_EUREKA_COLLISION",
+                    "reason": eureka_reason,
+                    "delta": delta,
+                }
 
             # Compile into .resin skill
             skill = ResinSkill(delta=delta, node_id=self.node_id)
@@ -261,7 +263,7 @@ class QueenNode:
 
     def broadcast_tombstone(
         self, compromised_pubkey: str, reason: str = "PHYSICS_SPOOF_DETECTED"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Revokes a compromised public key and broadcasts a signed Tombstone."""
         self.revoked_keys.add(compromised_pubkey)
 
@@ -285,7 +287,7 @@ class QueenNode:
         if self.pub_sock:
             self.pub_sock.send_multipart([TOPIC_RESIN_SKILL, payload_bytes])
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Returns runtime statistics for the Queen coordinator."""
         return {
             "node_id": self.node_id,

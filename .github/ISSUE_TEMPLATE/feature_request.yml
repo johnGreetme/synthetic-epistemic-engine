@@ -1,0 +1,42 @@
+name: Feature Request
+description: Propose a new epistemic drive, Z3 physical invariant, mesh transport layer, or LLM bypass strategy.
+title: "[FEAT]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature or improvement for the **Synthetic Epistemic Engine (SEE)**!
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: A clear and concise description of what the problem or limitation is.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution / Architectural Design
+      description: Describe the solution you'd like, including interfaces, mathematical formulation, or Z3 axioms.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or fallback features you have evaluated.
+  - type: dropdown
+    id: target_subsystem
+    attributes:
+      label: Target Subsystem
+      options:
+        - "see.active_inference (SVI, Free Energy Models)"
+        - "see.dream_sandbox (LLM Prompting, Latent Arena)"
+        - "see.mesh (ZeroMQ, Gossipsub, Hardware Enclaves)"
+        - "see.immunity (FAISS, .resin DSL, Tombstone)"
+        - "see.nodes (Queen / Forager Architecture)"
+        - "diana_core (Z3 Crucible Microkernel)"
+        - "Other / Tooling"
+    validations:
+      required: true

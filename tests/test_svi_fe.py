@@ -1,13 +1,10 @@
 """Unit tests for NumPyro/JAX SVI Free Energy calculation and Nociception pain events."""
 
-import jax
 import pytest
+
 from see.active_inference.nociception import (
-    NociceptionEngine,
     PAIN_THRESHOLD,
-    SUSTAINED_PAIN_TICKS,
-    epistemic_model,
-    compute_total_eig,
+    NociceptionEngine,
 )
 
 

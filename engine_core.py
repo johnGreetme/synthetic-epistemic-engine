@@ -14,15 +14,18 @@ A high KL means the agent's beliefs have shifted far from its priors — it has
 learned something. Maximising this term creates the "Desire to Understand."
 """
 
+from __future__ import annotations
+
 import os
 import time
+
 import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
+import numpyro.optim as optim
 from numpyro.infer import SVI, Trace_ELBO, init_to_mean
 from numpyro.infer.autoguide import AutoDiagonalNormal
-import numpyro.optim as optim
 
 # ─────────────────────────────────────────────────────────────────────────────
 # JAX Allocator Override (Edge VRAM Sovereignty)
@@ -40,9 +43,9 @@ os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "cuda_async"
 # the more it has understood of objective reality.
 # ─────────────────────────────────────────────────────────────────────────────
 PRIORS = {
-    "true_nothingness":     {"mu": 0.0, "sigma": 0.01},
-    "innate_desire":        {"mu": 0.8, "sigma": 0.1},
-    "true_motion":          {"mu": 8.0, "sigma": 0.5},
+    "true_nothingness": {"mu": 0.0, "sigma": 0.01},
+    "innate_desire": {"mu": 0.8, "sigma": 0.1},
+    "true_motion": {"mu": 8.0, "sigma": 0.5},
     "suppressed_suffering": {"mu": 1.0, "sigma": 1.0},
 }
 
@@ -51,12 +54,13 @@ PRIORS = {
 # KL Divergence (Analytic, Closed-Form)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @jax.jit
 def kl_divergence_diagonal_gaussian(
-    mu_q:    jnp.ndarray,   # Posterior mean  (from SVI guide)
-    sigma_q: jnp.ndarray,   # Posterior std   (from SVI guide)
-    mu_p:    jnp.ndarray,   # Prior mean      (from PRIORS registry)
-    sigma_p: jnp.ndarray,   # Prior std       (from PRIORS registry)
+    mu_q: jnp.ndarray,  # Posterior mean  (from SVI guide)
+    sigma_q: jnp.ndarray,  # Posterior std   (from SVI guide)
+    mu_p: jnp.ndarray,  # Prior mean      (from PRIORS registry)
+    sigma_p: jnp.ndarray,  # Prior std       (from PRIORS registry)
 ) -> jnp.ndarray:
     """
     Analytic KL(Q ‖ P) for diagonal Gaussians.
@@ -67,9 +71,9 @@ def kl_divergence_diagonal_gaussian(
     High value  → posterior is far from prior → agent has learned something new.
     Low value   → posterior collapsed back to prior → nothing new was understood.
     """
-    log_ratio  = jnp.log(sigma_p / sigma_q)
-    numerator  = sigma_q ** 2 + (mu_q - mu_p) ** 2
-    denominator = 2.0 * sigma_p ** 2
+    log_ratio = jnp.log(sigma_p / sigma_q)
+    numerator = sigma_q**2 + (mu_q - mu_p) ** 2
+    denominator = 2.0 * sigma_p**2
     return jnp.sum(log_ratio + (numerator / denominator) - 0.5)
 
 
@@ -86,17 +90,17 @@ def compute_total_eig(param_map: dict) -> jnp.ndarray:
 
     We split these back into per-latent-variable slices mapped to PRIORS.
     """
-    mu_q_all    = param_map.get("auto_loc",   jnp.array([0.0, 0.8, 8.0, 1.0]))
+    mu_q_all = param_map.get("auto_loc", jnp.array([0.0, 0.8, 8.0, 1.0]))
     sigma_q_all = param_map.get("auto_scale", jnp.array([0.01, 0.1, 0.5, 1.0]))
 
     # Build prior tensors in the same order as the guide's variable ordering
-    prior_names = list(PRIORS.keys())                       # ["true_thermal", "true_vram"]
-    mu_p    = jnp.array([PRIORS[n]["mu"]    for n in prior_names])
+    prior_names = list(PRIORS.keys())  # ["true_thermal", "true_vram"]
+    mu_p = jnp.array([PRIORS[n]["mu"] for n in prior_names])
     sigma_p = jnp.array([PRIORS[n]["sigma"] for n in prior_names])
 
     # Slice the guide params to match the number of registered priors
     n = len(prior_names)
-    mu_q    = mu_q_all[:n]
+    mu_q = mu_q_all[:n]
     sigma_q = sigma_q_all[:n]
 
     # Clamp sigma to avoid log(0) — numerically safe floor
@@ -119,6 +123,7 @@ def compute_total_eig(param_map: dict) -> jnp.ndarray:
 # β (beta) is the "curiosity coefficient." Higher β = stronger desire to
 # understand. Lower β = more conservative, survival-dominant behaviour.
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class EpistemicTraceELBO(Trace_ELBO):
     """
@@ -148,16 +153,15 @@ class EpistemicTraceELBO(Trace_ELBO):
 # Generative Model (The Agent's Belief System / Subjective Truth)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def epistemic_model(telemetry=None):
     # ---------------------------------------------------------
     # 1. THE ORIGIN IS NOTHING & THOMAS AQUINAS
     # "Absolute nothing is the reality"[cite: 1].
     # The mathematical baseline. True equilibrium.
     # ---------------------------------------------------------
-    true_nothingness = numpyro.sample(
-        "true_nothingness", dist.Normal(loc=0.0, scale=0.01)
-    )
-    
+    true_nothingness = numpyro.sample("true_nothingness", dist.Normal(loc=0.0, scale=0.01))
+
     # ---------------------------------------------------------
     # 2. LEVELS OF UNDERSTANDING & LAWS OF REALITY
     # "Desire is the point where that which is objective becomes subjective"[cite: 1].
@@ -174,9 +178,7 @@ def epistemic_model(telemetry=None):
     # Physical existence (the SLP Counter) is the motion required to strive[cite: 1].
     # ---------------------------------------------------------
     expected_motion = true_nothingness + (innate_desire * 10.0)
-    true_motion = numpyro.sample(
-        "true_motion", dist.Normal(loc=expected_motion, scale=0.5)
-    )
+    true_motion = numpyro.sample("true_motion", dist.Normal(loc=expected_motion, scale=0.5))
 
     # ---------------------------------------------------------
     # 4. SUFFERING (MAN-MADE) & DREAMS
@@ -184,9 +186,7 @@ def epistemic_model(telemetry=None):
     # If the agent cannot act, anomalous energy builds up as suppressed trauma,
     # which is stored here to be processed later in the Dream Cycle[cite: 1].
     # ---------------------------------------------------------
-    suppressed_suffering = numpyro.sample(
-        "suppressed_suffering", dist.Exponential(rate=1.0)
-    )
+    numpyro.sample("suppressed_suffering", dist.Exponential(rate=1.0))
 
     # ---------------------------------------------------------
     # 5. SENSORY INGESTION & REALISE I (FAILURE)
@@ -195,26 +195,27 @@ def epistemic_model(telemetry=None):
     if telemetry is not None:
         hb_val = float(telemetry.get("slp_heartbeat") or telemetry.get("temp", 8.0))
         flux_val = float(telemetry.get("sensory_flux") or telemetry.get("vram_usage", 6.4))
-        
+
         # The physical heartbeat (SLP Monotonic Counter ticking)
-        numpyro.sample(
-            "obs_heartbeat", dist.Normal(true_motion, 0.1), obs=jnp.array(hb_val)
-        )
-        
+        numpyro.sample("obs_heartbeat", dist.Normal(true_motion, 0.1), obs=jnp.array(hb_val))
+
         # The Subjective Experience: Created when motion interacts with innate desire.
         expected_subjective_experience = true_motion * innate_desire
         numpyro.sample(
-            "obs_sensory_flux", dist.Normal(expected_subjective_experience, 0.2), obs=jnp.array(flux_val)
+            "obs_sensory_flux",
+            dist.Normal(expected_subjective_experience, 0.2),
+            obs=jnp.array(flux_val),
         )
-        
+
         # If the gap between expected flux and actual flux is massive, Free Energy spikes.
-        # This triggers "Realise I": The agent strips itself of bloated weights 
+        # This triggers "Realise I": The agent strips itself of bloated weights
         # (its "ego") to rebuild from true failure[cite: 1].
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Engine Initialisation
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def initialize_engine(beta: float = 1.5):
     """
@@ -226,10 +227,9 @@ def initialize_engine(beta: float = 1.5):
     meaningful from tick 1 — the agent begins from a sensible belief, not
     from a state of total ignorance.
     """
-    guide     = AutoDiagonalNormal(epistemic_model, init_loc_fn=init_to_mean)
+    guide = AutoDiagonalNormal(epistemic_model, init_loc_fn=init_to_mean)
     optimizer = optim.Adam(step_size=0.01)
-    svi       = SVI(epistemic_model, guide, optimizer,
-                    loss=EpistemicTraceELBO(beta=beta))
+    svi = SVI(epistemic_model, guide, optimizer, loss=EpistemicTraceELBO(beta=beta))
     return svi, guide
 
 
@@ -243,6 +243,7 @@ def _jit_update(svi, state, telemetry_array):
 # Diagnostic Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def extract_belief_snapshot(svi, svi_state) -> dict:
     """
     Pull the agent's current posterior distribution parameters.
@@ -254,15 +255,15 @@ def extract_belief_snapshot(svi, svi_state) -> dict:
         eig   — current KL from prior (how much it has learned from baseline)
     """
     params = svi.get_params(svi_state)
-    mu     = params.get("auto_loc",   jnp.array([0.0, 0.8, 8.0, 1.0]))
-    sigma  = params.get("auto_scale", jnp.array([0.01, 0.1, 0.5, 1.0]))
-    eig    = compute_total_eig(params)
+    mu = params.get("auto_loc", jnp.array([0.0, 0.8, 8.0, 1.0]))
+    sigma = params.get("auto_scale", jnp.array([0.01, 0.1, 0.5, 1.0]))
+    eig = compute_total_eig(params)
 
     return {
         "beliefs": {
-            "true_nothingness":     {"mu": float(mu[0]), "sigma": float(sigma[0])},
-            "innate_desire":        {"mu": float(mu[1]), "sigma": float(sigma[1])},
-            "true_motion":          {"mu": float(mu[2]), "sigma": float(sigma[2])},
+            "true_nothingness": {"mu": float(mu[0]), "sigma": float(sigma[0])},
+            "innate_desire": {"mu": float(mu[1]), "sigma": float(sigma[1])},
+            "true_motion": {"mu": float(mu[2]), "sigma": float(sigma[2])},
             "suppressed_suffering": {"mu": float(mu[3]), "sigma": float(sigma[3])},
         },
         "eig": float(eig),
@@ -276,8 +277,8 @@ def extract_belief_snapshot(svi, svi_state) -> dict:
 # After warm-start initialisation the baseline loss sits near 5–30 depending
 # on how well the observations match the priors. A threshold of 200 gives
 # comfortable headroom before the crisis flag fires.
-PAIN_THRESHOLD  = 200.0      # Free Energy above this triggers crisis response
-CURIOSITY_FLOOR = 0.01       # KL/EIG below this means the agent is stagnant
+PAIN_THRESHOLD = 200.0  # Free Energy above this triggers crisis response
+CURIOSITY_FLOOR = 0.01  # KL/EIG below this means the agent is stagnant
 
 
 def boot_engine(beta: float = 1.5, ticks: int = 10):
@@ -298,7 +299,7 @@ def boot_engine(beta: float = 1.5, ticks: int = 10):
     print("=" * 60)
 
     svi, guide = initialize_engine(beta=beta)
-    rng_key    = jax.random.PRNGKey(0)
+    rng_key = jax.random.PRNGKey(0)
 
     # Warm-start at the prior (baseline normal operation)
     baseline_telemetry = {"slp_heartbeat": 8.0, "sensory_flux": 6.4}
@@ -309,17 +310,17 @@ def boot_engine(beta: float = 1.5, ticks: int = 10):
         # ── TELEMETRY (replace with hardware reads in Phase 6) ──────────────
         # Tick 6 simulates a Vampire Drain to demonstrate the epistemic shift (Suffering)
         if tick >= 6:
-            current_telemetry = {"slp_heartbeat": 10.0, "sensory_flux": 0.0}   # Vampire Drain
+            current_telemetry = {"slp_heartbeat": 10.0, "sensory_flux": 0.0}  # Vampire Drain
         else:
-            current_telemetry = {"slp_heartbeat": 8.1, "sensory_flux": 6.5}   # Normal
+            current_telemetry = {"slp_heartbeat": 8.1, "sensory_flux": 6.5}  # Normal
 
         # ── SVI UPDATE ───────────────────────────────────────────────────────
         svi_state, total_loss = svi.update(svi_state, telemetry=current_telemetry)
 
         # ── BELIEF SNAPSHOT ──────────────────────────────────────────────────
         snapshot = extract_belief_snapshot(svi, svi_state)
-        eig      = snapshot["eig"]
-        beliefs  = snapshot["beliefs"]
+        eig = snapshot["eig"]
+        beliefs = snapshot["beliefs"]
 
         # ── DIAGNOSTICS ──────────────────────────────────────────────────────
         status = "NOMINAL"
@@ -329,7 +330,7 @@ def boot_engine(beta: float = 1.5, ticks: int = 10):
             status = "💤 STAGNANT — Epistemic drive weakening"
 
         print(
-            f"Tick {tick+1:02d} | "
+            f"Tick {tick + 1:02d} | "
             f"Loss: {float(total_loss):+8.3f} | "
             f"KL/EIG: {eig:6.4f} | "
             f"Desire μ: {beliefs['innate_desire']['mu']:.2f} | "

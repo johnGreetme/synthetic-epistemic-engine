@@ -1,9 +1,9 @@
 """Unit tests for Metabolic Triage priority queue sorting and ZeroMQ transport."""
 
 import time
-import pytest
-from see.mesh.triage import MetabolicTriageQueue, TriageItem
+
 from see.mesh.crypto_enclave import CryptoEnclave, SignedEnvelope
+from see.mesh.triage import MetabolicTriageQueue
 
 
 def test_metabolic_triage_priority_ordering():

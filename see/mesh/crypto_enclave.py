@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -27,11 +27,13 @@ class SignedEnvelope:
 
     def to_json(self) -> str:
         """Serializes envelope to JSON string."""
-        return json.dumps({
-            "payload": self.payload,
-            "signature_b64": self.signature_b64,
-            "node_pubkey": self.node_pubkey,
-        })
+        return json.dumps(
+            {
+                "payload": self.payload,
+                "signature_b64": self.signature_b64,
+                "node_pubkey": self.node_pubkey,
+            }
+        )
 
     @classmethod
     def from_json(cls, json_str: str) -> SignedEnvelope:
@@ -47,9 +49,7 @@ class SignedEnvelope:
 class CryptoEnclave:
     """Manages Ed25519 private/public key operations and payload verification."""
 
-    def __init__(
-        self, private_key: Optional[ed25519.Ed25519PrivateKey] = None
-    ) -> None:
+    def __init__(self, private_key: ed25519.Ed25519PrivateKey | None = None) -> None:
         if private_key is None:
             self._private_key = ed25519.Ed25519PrivateKey.generate()
         else:
@@ -61,7 +61,7 @@ class CryptoEnclave:
         """Returns internal Ed25519 public key instance."""
         return self._public_key
 
-    def sign(self, message: Union[bytes, str]) -> str:
+    def sign(self, message: bytes | str) -> str:
         """Signs a message using the enclave's Ed25519 private key, returning Base64 string."""
         data = message.encode("utf-8") if isinstance(message, str) else message
         sig_bytes = self._private_key.sign(data)
@@ -69,9 +69,9 @@ class CryptoEnclave:
 
     @staticmethod
     def verify(
-        public_key: Union[ed25519.Ed25519PublicKey, str],
+        public_key: ed25519.Ed25519PublicKey | str,
         signature_b64: str,
-        message: Union[bytes, str],
+        message: bytes | str,
     ) -> bool:
         """Verifies an Ed25519 signature against a message and public key."""
         try:
@@ -101,7 +101,7 @@ class CryptoEnclave:
         raw_bytes = base64.b64decode(pub_b64)
         return ed25519.Ed25519PublicKey.from_public_bytes(raw_bytes)
 
-    def wrap_payload(self, payload_obj: Dict[str, Any]) -> SignedEnvelope:
+    def wrap_payload(self, payload_obj: dict[str, Any]) -> SignedEnvelope:
         """Serializes dictionary to canonical JSON string and generates a signed envelope."""
         canonical_json = json.dumps(payload_obj, sort_keys=True)
         sig = self.sign(canonical_json)
@@ -112,7 +112,7 @@ class CryptoEnclave:
         )
 
     @staticmethod
-    def unwrap_payload(envelope: SignedEnvelope) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    def unwrap_payload(envelope: SignedEnvelope) -> tuple[bool, dict[str, Any] | None]:
         """Validates envelope signature and returns (is_valid, parsed_dict)."""
         is_valid = CryptoEnclave.verify(
             public_key=envelope.node_pubkey,

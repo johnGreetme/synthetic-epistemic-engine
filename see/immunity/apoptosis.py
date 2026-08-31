@@ -9,8 +9,9 @@ and transitioning to a dead state to prevent adversary key exploitation.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any
 
 
 @dataclass
@@ -31,23 +32,21 @@ class ApoptosisManager:
         self,
         node_id: str,
         own_pubkey: str,
-        on_self_apoptosis_callback: Optional[Callable[[], None]] = None,
+        on_self_apoptosis_callback: Callable[[], None] | None = None,
     ) -> None:
         self.node_id = node_id
         self.own_pubkey = own_pubkey
         self.on_self_apoptosis_callback = on_self_apoptosis_callback
 
-        self.revoked_keys: Set[str] = set()
+        self.revoked_keys: set[str] = set()
         self.is_dead: bool = False
-        self.apoptosis_history: List[ApoptosisEvent] = []
+        self.apoptosis_history: list[ApoptosisEvent] = []
 
     def is_revoked(self, pubkey: str) -> bool:
         """Checks if a public key has been tombstoned."""
         return pubkey in self.revoked_keys
 
-    def handle_tombstone(
-        self, tombstone_payload: Dict[str, Any]
-    ) -> ApoptosisEvent:
+    def handle_tombstone(self, tombstone_payload: dict[str, Any]) -> ApoptosisEvent:
         """Processes an incoming verified Tombstone broadcast."""
         compromised_key = tombstone_payload.get("compromised_pubkey", "")
         reason = tombstone_payload.get("reason", "PHYSICS_SPOOF_DETECTED")

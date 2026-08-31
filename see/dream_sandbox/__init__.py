@@ -2,13 +2,13 @@
 
 from see.dream_sandbox.crucible_adapter import (
     CrucibleAdapter,
-    SemanticBoundingBox,
     CrucibleVerificationResult,
+    SemanticBoundingBox,
 )
 from see.dream_sandbox.morphogenetic_agent import (
-    MorphogeneticAgent,
     LatentArena,
     MorphogenesisEvent,
+    MorphogeneticAgent,
 )
 
 __all__ = [

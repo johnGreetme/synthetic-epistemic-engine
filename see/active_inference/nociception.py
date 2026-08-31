@@ -9,17 +9,16 @@ events when FE > 500.0 sustained over 3 consecutive ticks.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import numpyro
 import numpyro.distributions as dist
+import numpyro.optim as optim
 from numpyro.infer import SVI, Trace_ELBO, init_to_mean
 from numpyro.infer.autoguide import AutoDiagonalNormal
-import numpyro.optim as optim
 
 # JAX VRAM Allocator Guardrails for Edge Hardware
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
@@ -28,7 +27,7 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "cuda_async")
 PAIN_THRESHOLD: float = 500.0
 SUSTAINED_PAIN_TICKS: int = 3
 
-PRIORS: Dict[str, Dict[str, float]] = {
+PRIORS: dict[str, dict[str, float]] = {
     "true_nothingness": {"mu": 0.0, "sigma": 0.01},
     "innate_desire": {"mu": 0.8, "sigma": 0.1},
     "true_motion": {"mu": 8.0, "sigma": 0.5},
@@ -51,7 +50,7 @@ def kl_divergence_diagonal_gaussian(
 
 
 @jax.jit
-def compute_total_eig(param_map: Dict[str, Any]) -> jnp.ndarray:
+def compute_total_eig(param_map: dict[str, Any]) -> jnp.ndarray:
     """Computes total Expected Information Gain (EIG) across active latent priors."""
     mu_q_all = param_map.get("auto_loc", jnp.array([0.0, 0.8, 8.0, 1.0]))
     sigma_q_all = param_map.get("auto_scale", jnp.array([0.01, 0.1, 0.5, 1.0]))
@@ -80,32 +79,26 @@ class EpistemicTraceELBO(Trace_ELBO):
     def loss(
         self,
         rng_key: jax.Array,
-        param_map: Dict[str, Any],
+        param_map: dict[str, Any],
         model: Any,
         guide: Any,
         *args: Any,
         **kwargs: Any,
     ) -> jnp.ndarray:
-        pragmatic_loss = super().loss(
-            rng_key, param_map, model, guide, *args, **kwargs
-        )
+        pragmatic_loss = super().loss(rng_key, param_map, model, guide, *args, **kwargs)
         eig = compute_total_eig(param_map)
         total_loss = pragmatic_loss - (self.beta * eig)
         return total_loss
 
 
-def epistemic_model(telemetry: Optional[Dict[str, float]] = None) -> None:
+def epistemic_model(telemetry: dict[str, float] | None = None) -> None:
     """Probabilistic generative model of robot sensory expectations."""
-    true_nothingness = numpyro.sample(
-        "true_nothingness", dist.Normal(loc=0.0, scale=0.01)
-    )
+    true_nothingness = numpyro.sample("true_nothingness", dist.Normal(loc=0.0, scale=0.01))
     innate_desire = numpyro.sample(
         "innate_desire", dist.Beta(concentration1=8.0, concentration0=2.0)
     )
     expected_motion = true_nothingness + (innate_desire * 10.0)
-    true_motion = numpyro.sample(
-        "true_motion", dist.Normal(loc=expected_motion, scale=0.5)
-    )
+    true_motion = numpyro.sample("true_motion", dist.Normal(loc=expected_motion, scale=0.5))
     numpyro.sample("suppressed_suffering", dist.Exponential(rate=1.0))
 
     if telemetry is not None:
@@ -135,9 +128,9 @@ class NociceptionEvent:
     pain_level: float
     sustained_ticks: int
     pain_threshold_exceeded: bool
-    telemetry: Dict[str, float]
-    belief_snapshot: Dict[str, Any]
-    event_name: Optional[str] = None
+    telemetry: dict[str, float]
+    belief_snapshot: dict[str, Any]
+    event_name: str | None = None
 
 
 class NociceptionEngine:
@@ -172,9 +165,9 @@ class NociceptionEngine:
 
         self.tick_count: int = 0
         self.consecutive_pain_ticks: int = 0
-        self.history: List[NociceptionEvent] = []
+        self.history: list[NociceptionEvent] = []
 
-    def update(self, telemetry: Dict[str, float]) -> NociceptionEvent:
+    def update(self, telemetry: dict[str, float]) -> NociceptionEvent:
         """Runs a single SVI inference step with incoming telemetry."""
         self.tick_count += 1
         self.svi_state, loss = self.svi.update(self.svi_state, telemetry=telemetry)
@@ -204,7 +197,7 @@ class NociceptionEngine:
         self.history.append(event)
         return event
 
-    def extract_belief_snapshot(self) -> Dict[str, Any]:
+    def extract_belief_snapshot(self) -> dict[str, Any]:
         """Extracts current posterior distribution parameters from SVI state."""
         params = self.svi.get_params(self.svi_state)
         mu = params.get("auto_loc", jnp.array([0.0, 0.8, 8.0, 1.0]))

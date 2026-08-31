@@ -13,13 +13,13 @@ from __future__ import annotations
 import json
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import zmq
 
 from see.active_inference.nociception import NociceptionEngine, NociceptionEvent
-from see.dream_sandbox.crucible_adapter import CrucibleAdapter, CrucibleVerificationResult
+from see.dream_sandbox.crucible_adapter import CrucibleAdapter
 from see.dream_sandbox.morphogenetic_agent import MorphogeneticAgent
 from see.immunity.apoptosis import ApoptosisManager
 from see.immunity.clawhub_registry import ClawhubRegistry, ResinSkill, build_anomaly_vector
@@ -41,7 +41,7 @@ class ForagerNode:
     def __init__(
         self,
         node_id: str = "forager-thor-alpha",
-        queen_pubkey: Optional[str] = None,
+        queen_pubkey: str | None = None,
         connect_zmq: bool = True,
         ingress_addr: str = ZMQ_FORAGER_TO_QUEEN,
         egress_addr: str = ZMQ_QUEEN_BROADCAST,
@@ -75,12 +75,12 @@ class ForagerNode:
         self.skills_applied: int = 0
 
         # Networking & Background Listener
-        self.context: Optional[zmq.Context] = None
-        self.push_sock: Optional[zmq.Socket] = None
-        self.sub_sock: Optional[zmq.Socket] = None
+        self.context: zmq.Context | None = None
+        self.push_sock: zmq.Socket | None = None
+        self.sub_sock: zmq.Socket | None = None
 
         self._running = False
-        self._listener_thread: Optional[threading.Thread] = None
+        self._listener_thread: threading.Thread | None = None
 
         if self.connect_zmq:
             self._init_zmq()
@@ -186,14 +186,13 @@ class ForagerNode:
             pass
 
     def check_local_immunity(
-        self, telemetry: Dict[str, float], free_energy: float
-    ) -> Tuple[bool, Optional[ResinSkill]]:
+        self, telemetry: dict[str, float], free_energy: float
+    ) -> tuple[bool, ResinSkill | None]:
         """Queries local FAISS registry for a previously learned structural patch."""
         vec = build_anomaly_vector(telemetry, free_energy)
         skill, distance = self.local_registry.query(vec, distance_threshold=0.1)
 
         if skill is not None:
-            delta = skill.delta
             slot = self.agent.arena.next_dormant_slot()
             if slot is not None:
                 self.agent.arena.activate_slot(slot)
@@ -203,20 +202,18 @@ class ForagerNode:
         return False, None
 
     def process_telemetry_tick(
-        self, telemetry: Dict[str, float]
-    ) -> Tuple[NociceptionEvent, Optional[Dict[str, Any]]]:
+        self, telemetry: dict[str, float]
+    ) -> tuple[NociceptionEvent, dict[str, Any] | None]:
         """Runs a tick of active inference nociception and coordinates immunity or morphogenesis."""
         if self.apoptosis.is_dead:
             raise RuntimeError(f"Node {self.node_id} is dead due to Apoptosis.")
 
         event = self.nociception.update(telemetry)
-        result_action: Optional[Dict[str, Any]] = None
+        result_action: dict[str, Any] | None = None
 
         if event.pain_threshold_exceeded:
             # 1. Check local FAISS immunity
-            has_immunity, skill = self.check_local_immunity(
-                telemetry, event.free_energy
-            )
+            has_immunity, skill = self.check_local_immunity(telemetry, event.free_energy)
             if has_immunity and skill:
                 result_action = {
                     "action": "APPLIED_LOCAL_IMMUNITY",
@@ -265,10 +262,10 @@ class ForagerNode:
     def _create_mutation_delta(
         self,
         slot_index: int,
-        telemetry: Dict[str, float],
+        telemetry: dict[str, float],
         pre_fe: float,
         post_fe: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Packages local structural weights and anomaly telemetry into mutation payload."""
         weights = np.array(self.agent.arena.weights[slot_index])
         vec = build_anomaly_vector(telemetry, pre_fe)
@@ -286,7 +283,7 @@ class ForagerNode:
             "timestamp": time.time(),
         }
 
-    def transmit_mutation(self, delta: Dict[str, Any]) -> Optional[SignedEnvelope]:
+    def transmit_mutation(self, delta: dict[str, Any]) -> SignedEnvelope | None:
         """Signs and transmits mutation payload to Queen over ZeroMQ PUSH."""
         if self.offline or self.apoptosis.is_dead:
             return None
@@ -298,7 +295,7 @@ class ForagerNode:
 
         return envelope
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Returns runtime telemetry for the Forager node."""
         return {
             "node_id": self.node_id,

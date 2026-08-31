@@ -1,0 +1,64 @@
+name: Bug Report
+description: Report a runtime error, Z3 solver fault, SVI divergence, or mesh transport failure.
+title: "[BUG]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue in the **Synthetic Epistemic Engine (SEE)**!
+  - type: input
+    id: version
+    attributes:
+      label: SEE Version
+      description: What version of `synthetic-epistemic-engine` are you using? (e.g. `1.0.0`)
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component Affected
+      description: Which subsystem is failing?
+      options:
+        - "Active Inference / SVI Nociception (see.active_inference)"
+        - "DreamSandbox / Z3 Crucible Adapter (see.dream_sandbox)"
+        - "ZeroMQ Mesh Transport / Metabolic Triage (see.mesh)"
+        - "Clawhub Registry / FAISS Memory (see.immunity)"
+        - "Tombstone Protocol / Apoptosis (see.immunity)"
+        - "Queen / Forager Nodes (see.nodes)"
+        - "Build / Submodule Setup (diana_core)"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment & Hardware
+      description: OS, Python version, hardware target (e.g., Ubuntu 22.04, Python 3.10, Jetson AGX Thor / RTX 6000 Ada).
+      placeholder: "Ubuntu 22.04 LTS, Python 3.10.12, NVIDIA Jetson AGX Thor"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the Bug
+      description: A clear and concise description of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: Minimal code snippet or steps to reproduce the issue.
+      placeholder: |
+        1. Initialize ForagerNode(...)
+        2. Feed telemetry: {"slp_heartbeat": 50.0, "sensory_flux": 120.0}
+        3. Observe error trace...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs & Stacktrace
+      description: Paste any relevant terminal logs, stack traces, or Z3 SMT dumps.
+      render: shell

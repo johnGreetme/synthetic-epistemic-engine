@@ -12,9 +12,8 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import faiss
 import numpy as np
@@ -25,9 +24,7 @@ EUREKA_EFFICIENCY_MARGIN: float = 1.20  # Requires > 20% improvement
 DEFAULT_REGISTRY_PATH: str = "clawhub_registry.json"
 
 
-def build_anomaly_vector(
-    telemetry: Dict[str, float], free_energy: float
-) -> np.ndarray:
+def build_anomaly_vector(telemetry: dict[str, float], free_energy: float) -> np.ndarray:
     """Extracts a 6-dimensional normalized anomaly feature vector for FAISS indexing."""
     heartbeat = float(telemetry.get("slp_heartbeat", 8.0))
     flux = float(telemetry.get("sensory_flux", 6.4))
@@ -48,11 +45,11 @@ class ResinSkill:
 
     def __init__(
         self,
-        delta: Dict[str, Any],
+        delta: dict[str, Any],
         node_id: str = "queen-ada",
-        skill_id: Optional[str] = None,
-        signature: Optional[str] = None,
-        created_at: Optional[float] = None,
+        skill_id: str | None = None,
+        signature: str | None = None,
+        created_at: float | None = None,
     ) -> None:
         self.skill_id = skill_id or str(uuid.uuid4())[:8]
         self.node_id = node_id
@@ -118,7 +115,7 @@ class ResinSkill:
         resin_body += "\n}"
         return resin_body
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Converts skill to dictionary for JSON persistence/network transmission."""
         return {
             "skill_id": self.skill_id,
@@ -129,7 +126,7 @@ class ResinSkill:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> ResinSkill:
+    def from_dict(cls, d: dict[str, Any]) -> ResinSkill:
         """Instantiates skill from parsed dictionary."""
         return cls(
             delta=d["delta"],
@@ -146,8 +143,8 @@ class ClawhubRegistry:
     def __init__(self, dim: int = FAISS_ANOMALY_DIM) -> None:
         self.dim = dim
         self.index = faiss.IndexFlatL2(dim)
-        self.skills: List[ResinSkill] = []
-        self.vectors: List[np.ndarray] = []
+        self.skills: list[ResinSkill] = []
+        self.vectors: list[np.ndarray] = []
 
     @property
     def size(self) -> int:
@@ -166,7 +163,7 @@ class ClawhubRegistry:
         anomaly_vector: np.ndarray,
         top_k: int = 1,
         distance_threshold: float = 50.0,
-    ) -> Tuple[Optional[ResinSkill], float]:
+    ) -> tuple[ResinSkill | None, float]:
         """Finds closest skill within the distance threshold, or returns (None, distance)."""
         if self.index.ntotal == 0:
             return None, float("inf")
@@ -184,15 +181,13 @@ class ClawhubRegistry:
 
     def evaluate_eureka_collision(
         self, anomaly_vector: np.ndarray, new_fe_reduction: float
-    ) -> Tuple[bool, Optional[str], Optional[ResinSkill]]:
+    ) -> tuple[bool, str | None, ResinSkill | None]:
         """Evaluates whether a new mutation is a redundant Eureka collision or a viable upgrade.
 
         Returns:
             (is_accepted, reason, existing_skill_or_none)
         """
-        existing_skill, dist = self.query(
-            anomaly_vector, distance_threshold=EUREKA_L2_THRESHOLD
-        )
+        existing_skill, dist = self.query(anomaly_vector, distance_threshold=EUREKA_L2_THRESHOLD)
         if existing_skill is None:
             return True, "NO_COLLISION", None
 
@@ -224,7 +219,7 @@ class ClawhubRegistry:
         if not p.exists():
             return 0
 
-        with open(p, "r", encoding="utf-8") as f:
+        with open(p, encoding="utf-8") as f:
             data = json.load(f)
 
         loaded_count = 0

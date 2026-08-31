@@ -6,9 +6,7 @@ rapid edge neurogenesis and structural morphogenesis without triggering JAX JIT 
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
 
 import jax
 import jax.numpy as jnp
@@ -48,13 +46,11 @@ class LatentArena:
         self.feature_dim = feature_dim
         self.rng = jax.random.PRNGKey(seed)
 
-        self.weights = jax.random.normal(
-            self.rng, shape=(max_capacity, feature_dim)
-        ) * jnp.sqrt(2.0 / feature_dim)
-
-        mask_values = [1.0] * initial_capacity + [0.0] * (
-            max_capacity - initial_capacity
+        self.weights = jax.random.normal(self.rng, shape=(max_capacity, feature_dim)) * jnp.sqrt(
+            2.0 / feature_dim
         )
+
+        mask_values = [1.0] * initial_capacity + [0.0] * (max_capacity - initial_capacity)
         self.mask = jnp.array(mask_values)
         self.node_age = np.zeros(max_capacity, dtype=np.int32)
 
@@ -63,7 +59,7 @@ class LatentArena:
         """Returns number of active slots."""
         return int(jnp.sum(self.mask))
 
-    def next_dormant_slot(self) -> Optional[int]:
+    def next_dormant_slot(self) -> int | None:
         """Finds the lowest index of an inactive dormant slot."""
         for i in range(self.max_capacity):
             if float(self.mask[i]) == 0.0:
@@ -73,7 +69,7 @@ class LatentArena:
     def activate_slot(
         self,
         slot_index: int,
-        initial_weights: Optional[np.ndarray | jnp.ndarray] = None,
+        initial_weights: np.ndarray | jnp.ndarray | None = None,
     ) -> bool:
         """Activates a dormant slot with optional weight initialization."""
         if slot_index < 0 or slot_index >= self.max_capacity:
@@ -118,11 +114,11 @@ class MorphogeneticAgent:
         self.pain_ticks_threshold = pain_ticks_threshold
         self.consecutive_pain_ticks: int = 0
         self.tick_count: int = 0
-        self.events: List[MorphogenesisEvent] = []
+        self.events: list[MorphogenesisEvent] = []
 
     def update(
         self, free_energy: float, pain_threshold: float = 500.0
-    ) -> Optional[MorphogenesisEvent]:
+    ) -> MorphogenesisEvent | None:
         """Processes a tick of Free Energy and triggers neurogenesis if pain is sustained."""
         self.tick_count += 1
 

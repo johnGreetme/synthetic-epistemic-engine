@@ -1,10 +1,8 @@
 """Unit tests for Z3 Crucible dynamic submodule adapter and UNSAT core extraction."""
 
-import pytest
 from see.dream_sandbox.crucible_adapter import (
     CrucibleAdapter,
     SemanticBoundingBox,
-    CrucibleVerificationResult,
     _resolve_diana_core,
 )
 

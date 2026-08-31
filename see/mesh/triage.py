@@ -12,7 +12,7 @@ import itertools
 import queue
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 @dataclass(order=True)
@@ -22,8 +22,8 @@ class TriageItem:
     priority: float
     timestamp: float
     sequence_id: int
-    payload: Dict[str, Any] = field(compare=False)
-    pub_key_b64: Optional[str] = field(default=None, compare=False)
+    payload: dict[str, Any] = field(compare=False)
+    pub_key_b64: str | None = field(default=None, compare=False)
 
     @property
     def free_energy(self) -> float:
@@ -35,17 +35,15 @@ class MetabolicTriageQueue:
     """Thread-safe priority queue sorting incoming Forager mutations by highest pain."""
 
     def __init__(self, maxsize: int = 0) -> None:
-        self._queue: queue.PriorityQueue[TriageItem] = queue.PriorityQueue(
-            maxsize=maxsize
-        )
+        self._queue: queue.PriorityQueue[TriageItem] = queue.PriorityQueue(maxsize=maxsize)
         self._counter = itertools.count()
 
     def push(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         pre_morph_fe: float,
-        pub_key_b64: Optional[str] = None,
-        timestamp: Optional[float] = None,
+        pub_key_b64: str | None = None,
+        timestamp: float | None = None,
     ) -> TriageItem:
         """Pushes a mutation payload into the priority queue ordered by -pre_morph_fe."""
         ts = time.time() if timestamp is None else float(timestamp)
@@ -62,13 +60,13 @@ class MetabolicTriageQueue:
         self._queue.put(item)
         return item
 
-    def pop(self, block: bool = True, timeout: Optional[float] = None) -> TriageItem:
+    def pop(self, block: bool = True, timeout: float | None = None) -> TriageItem:
         """Pops the highest-priority (highest physical pain) mutation from the queue."""
         return self._queue.get(block=block, timeout=timeout)
 
     def pop_payload(
-        self, block: bool = True, timeout: Optional[float] = None
-    ) -> Tuple[Dict[str, Any], float, Optional[str]]:
+        self, block: bool = True, timeout: float | None = None
+    ) -> tuple[dict[str, Any], float, str | None]:
         """Convenience method returning (payload, pre_morph_fe, pub_key_b64)."""
         item = self.pop(block=block, timeout=timeout)
         return item.payload, item.free_energy, item.pub_key_b64

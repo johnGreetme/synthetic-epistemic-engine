@@ -24,45 +24,49 @@ Biological Analogy (from the manuscript):
     The agent does not avoid pain — it uses pain as the signal to expand.
 """
 
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+
 import jax
 import jax.numpy as jnp
 import numpy as np
-import time
-from dataclasses import dataclass, field
-from typing import List, Optional
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 
-FEATURE_DIM           = 8     # Dimensionality of each latent node's weight vector
-MAX_ARENA_CAPACITY    = 32    # Hard ceiling before a full structural recompile
-INITIAL_CAPACITY      = 4     # Active nodes at boot
-PAIN_TICKS_THRESHOLD  = 3     # Sustained crisis ticks before neurogenesis fires
-APOPTOSIS_MAGNITUDE   = 1e-4  # Weight L2 norm below this triggers pruning
-MATURATION_TICKS      = 10    # Ticks a new node must survive before being eligible for quantization
+FEATURE_DIM = 8  # Dimensionality of each latent node's weight vector
+MAX_ARENA_CAPACITY = 32  # Hard ceiling before a full structural recompile
+INITIAL_CAPACITY = 4  # Active nodes at boot
+PAIN_TICKS_THRESHOLD = 3  # Sustained crisis ticks before neurogenesis fires
+APOPTOSIS_MAGNITUDE = 1e-4  # Weight L2 norm below this triggers pruning
+MATURATION_TICKS = 10  # Ticks a new node must survive before being eligible for quantization
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Morphogenesis Event Log
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class MorphogenesisEvent:
     """Record of a single structural change to the arena."""
-    tick:        int
-    event_type:  str          # "NEUROGENESIS" | "APOPTOSIS" | "QUANTIZATION"
-    node_index:  int
-    reason:      str
+
+    tick: int
+    event_type: str  # "NEUROGENESIS" | "APOPTOSIS" | "QUANTIZATION"
+    node_index: int
+    reason: str
     free_energy: float
     active_before: int
-    active_after:  int
+    active_after: int
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Latent Arena
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class LatentArena:
     """
@@ -79,21 +83,23 @@ class LatentArena:
     when we flip bits in the mask.
     """
 
-    def __init__(self, max_capacity: int = MAX_ARENA_CAPACITY,
-                 initial_capacity: int = INITIAL_CAPACITY,
-                 feature_dim: int = FEATURE_DIM):
-        self.max_capacity     = max_capacity
-        self.feature_dim      = feature_dim
-        self.rng              = jax.random.PRNGKey(42)
+    def __init__(
+        self,
+        max_capacity: int = MAX_ARENA_CAPACITY,
+        initial_capacity: int = INITIAL_CAPACITY,
+        feature_dim: int = FEATURE_DIM,
+    ):
+        self.max_capacity = max_capacity
+        self.feature_dim = feature_dim
+        self.rng = jax.random.PRNGKey(42)
 
         # Initialise weights with small random values (Xavier-style)
-        self.weights = jax.random.normal(
-            self.rng, shape=(max_capacity, feature_dim)
-        ) * jnp.sqrt(2.0 / feature_dim)
+        self.weights = jax.random.normal(self.rng, shape=(max_capacity, feature_dim)) * jnp.sqrt(
+            2.0 / feature_dim
+        )
 
         # Boolean mask — 1.0 = alive, 0.0 = dormant
-        mask_values = ([1.0] * initial_capacity +
-                       [0.0] * (max_capacity - initial_capacity))
+        mask_values = [1.0] * initial_capacity + [0.0] * (max_capacity - initial_capacity)
         self.mask = jnp.array(mask_values)
 
         # Track how many ticks each node has been alive (for maturation checks)
@@ -116,7 +122,7 @@ class LatentArena:
     def capacity_used_pct(self) -> float:
         return (self.active_count / self.max_capacity) * 100.0
 
-    def next_dormant_slot(self) -> Optional[int]:
+    def next_dormant_slot(self) -> int | None:
         """Return the index of the first dormant slot, or None if arena is full."""
         dormant_indices = jnp.where(self.mask == 0.0, size=self.max_capacity)[0]
         if len(dormant_indices) == 0:
@@ -129,8 +135,8 @@ class LatentArena:
         Initialise its weights with small noise so it starts learning fresh.
         """
         fresh_weights = jax.random.normal(rng_key, shape=(self.feature_dim,)) * 0.01
-        self.weights  = self.weights.at[index].set(fresh_weights)
-        self.mask     = self.mask.at[index].set(1.0)
+        self.weights = self.weights.at[index].set(fresh_weights)
+        self.mask = self.mask.at[index].set(1.0)
         self.node_age[index] = 0
 
     def deactivate_node(self, index: int):
@@ -138,8 +144,8 @@ class LatentArena:
         Apoptosis: flip an active node to dormant, zeroing its weights.
         This reclaims its slot for future neurogenesis.
         """
-        self.weights  = self.weights.at[index].set(jnp.zeros(self.feature_dim))
-        self.mask     = self.mask.at[index].set(0.0)
+        self.weights = self.weights.at[index].set(jnp.zeros(self.feature_dim))
+        self.mask = self.mask.at[index].set(0.0)
         self.node_age[index] = 0
 
     def increment_ages(self):
@@ -151,24 +157,27 @@ class LatentArena:
         """L2 norm of a node's weight vector — proxy for its contribution."""
         return float(jnp.linalg.norm(self.weights[index]))
 
-    def mature_nodes(self, min_age: int = MATURATION_TICKS) -> List[int]:
+    def mature_nodes(self, min_age: int = MATURATION_TICKS) -> list[int]:
         """Return indices of active nodes that have reached maturation age."""
         return [
-            i for i in range(self.max_capacity)
+            i
+            for i in range(self.max_capacity)
             if self.mask[i] == 1.0 and self.node_age[i] >= min_age
         ]
 
     def __repr__(self) -> str:
-        bars = "".join("█" if self.mask[i] == 1.0 else "░"
-                       for i in range(self.max_capacity))
-        return (f"LatentArena [{bars}] "
-                f"{self.active_count}/{self.max_capacity} active "
-                f"({self.capacity_used_pct:.0f}%)")
+        bars = "".join("█" if self.mask[i] == 1.0 else "░" for i in range(self.max_capacity))
+        return (
+            f"LatentArena [{bars}] "
+            f"{self.active_count}/{self.max_capacity} active "
+            f"({self.capacity_used_pct:.0f}%)"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Morphogenetic Agent
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class MorphogeneticAgent:
     """
@@ -189,13 +198,14 @@ class MorphogeneticAgent:
         is pruned, reclaiming its slot.
     """
 
-    def __init__(self, max_capacity: int = MAX_ARENA_CAPACITY,
-                 initial_capacity: int = INITIAL_CAPACITY):
-        self.arena                  = LatentArena(max_capacity, initial_capacity)
-        self.sustained_pain_timer   = 0
-        self.rng_key                = jax.random.PRNGKey(int(time.time()))
-        self.event_log: List[MorphogenesisEvent] = []
-        self.tick_count             = 0
+    def __init__(
+        self, max_capacity: int = MAX_ARENA_CAPACITY, initial_capacity: int = INITIAL_CAPACITY
+    ):
+        self.arena = LatentArena(max_capacity, initial_capacity)
+        self.sustained_pain_timer = 0
+        self.rng_key = jax.random.PRNGKey(int(time.time()))
+        self.event_log: list[MorphogenesisEvent] = []
+        self.tick_count = 0
 
     # ──────────────────────────────────────────────────────────────────────────
     # Core Update
@@ -251,7 +261,7 @@ class MorphogeneticAgent:
 
         if slot is None:
             print(f"  [MORPHOGENESIS] ⚠️  Arena at max capacity ({self.arena.max_capacity})!")
-            print(f"  [MORPHOGENESIS] Hard structural expansion required (full JIT recompile).")
+            print("  [MORPHOGENESIS] Hard structural expansion required (full JIT recompile).")
             # In Phase 6 on real hardware: expand MAX_ARENA_CAPACITY and rebuild.
             return
 
@@ -260,25 +270,27 @@ class MorphogeneticAgent:
         active_before = self.arena.active_count
 
         self.arena.activate_node(slot, subkey)
-        self.sustained_pain_timer = 0   # Reset — the agent has taken action
+        self.sustained_pain_timer = 0  # Reset — the agent has taken action
 
         event = MorphogenesisEvent(
-            tick          = self.tick_count,
-            event_type    = "NEUROGENESIS",
-            node_index    = slot,
-            reason        = f"Sustained pain for {PAIN_TICKS_THRESHOLD} ticks | FE={free_energy:.1f}",
-            free_energy   = free_energy,
-            active_before = active_before,
-            active_after  = self.arena.active_count,
+            tick=self.tick_count,
+            event_type="NEUROGENESIS",
+            node_index=slot,
+            reason=f"Sustained pain for {PAIN_TICKS_THRESHOLD} ticks | FE={free_energy:.1f}",
+            free_energy=free_energy,
+            active_before=active_before,
+            active_after=self.arena.active_count,
         )
         self.event_log.append(event)
 
-        print(f"\n  ┌{'─'*56}┐")
+        print(f"\n  ┌{'─' * 56}┐")
         print(f"  │  🧠 NEUROGENESIS — Tick {self.tick_count:<31}│")
         print(f"  │  New node spawned at slot {slot:<30}│")
-        print(f"  │  Active: {active_before} → {self.arena.active_count} of {self.arena.max_capacity:<25}│")
+        print(
+            f"  │  Active: {active_before} → {self.arena.active_count} of {self.arena.max_capacity:<25}│"
+        )
         print(f"  │  {self.arena!r:<54}│")
-        print(f"  └{'─'*56}┘\n")
+        print(f"  └{'─' * 56}┘\n")
 
     # ──────────────────────────────────────────────────────────────────────────
     # Apoptosis
@@ -296,7 +308,7 @@ class MorphogeneticAgent:
             if self.arena.mask[i] != 1.0:
                 continue
             if self.arena.node_age[i] < MATURATION_TICKS:
-                continue   # Give young nodes time to grow before pruning
+                continue  # Give young nodes time to grow before pruning
 
             norm = self.arena.node_weight_norm(i)
             if norm < APOPTOSIS_MAGNITUDE:
@@ -304,17 +316,19 @@ class MorphogeneticAgent:
                 self.arena.deactivate_node(i)
 
                 event = MorphogenesisEvent(
-                    tick          = self.tick_count,
-                    event_type    = "APOPTOSIS",
-                    node_index    = i,
-                    reason        = f"Weight norm {norm:.2e} < threshold {APOPTOSIS_MAGNITUDE:.2e}",
-                    free_energy   = free_energy,
-                    active_before = active_before,
-                    active_after  = self.arena.active_count,
+                    tick=self.tick_count,
+                    event_type="APOPTOSIS",
+                    node_index=i,
+                    reason=f"Weight norm {norm:.2e} < threshold {APOPTOSIS_MAGNITUDE:.2e}",
+                    free_energy=free_energy,
+                    active_before=active_before,
+                    active_after=self.arena.active_count,
                 )
                 self.event_log.append(event)
-                print(f"  [APOPTOSIS] ✂️  Node {i} pruned (norm={norm:.2e}). "
-                      f"Arena: {active_before} → {self.arena.active_count}")
+                print(
+                    f"  [APOPTOSIS] ✂️  Node {i} pruned (norm={norm:.2e}). "
+                    f"Arena: {active_before} → {self.arena.active_count}"
+                )
 
     # ──────────────────────────────────────────────────────────────────────────
     # Maturation & Quantization
@@ -334,24 +348,25 @@ class MorphogeneticAgent:
             if norm > APOPTOSIS_MAGNITUDE:
                 # Node is mature and contributing — mark for quantization
                 event = MorphogenesisEvent(
-                    tick          = self.tick_count,
-                    event_type    = "QUANTIZATION",
-                    node_index    = i,
-                    reason        = f"Node matured at age {self.arena.node_age[i]}",
-                    free_energy   = 0.0,
-                    active_before = self.arena.active_count,
-                    active_after  = self.arena.active_count,
+                    tick=self.tick_count,
+                    event_type="QUANTIZATION",
+                    node_index=i,
+                    reason=f"Node matured at age {self.arena.node_age[i]}",
+                    free_energy=0.0,
+                    active_before=self.arena.active_count,
+                    active_after=self.arena.active_count,
                 )
                 # Only log once per maturation milestone
                 already_logged = any(
-                    e.event_type == "QUANTIZATION" and e.node_index == i
-                    for e in self.event_log
+                    e.event_type == "QUANTIZATION" and e.node_index == i for e in self.event_log
                 )
                 if not already_logged:
                     self.event_log.append(event)
-                    print(f"  [MATURATION] 📦 Node {i} mature "
-                          f"(age={self.arena.node_age[i]}). "
-                          f"Queued for INT8 quantization.")
+                    print(
+                        f"  [MATURATION] 📦 Node {i} mature "
+                        f"(age={self.arena.node_age[i]}). "
+                        f"Queued for INT8 quantization."
+                    )
 
     # ──────────────────────────────────────────────────────────────────────────
     # Reporting
@@ -365,12 +380,15 @@ class MorphogeneticAgent:
             print("  No structural events recorded.")
             return
         for e in self.event_log:
-            icon = {"NEUROGENESIS": "🧠", "APOPTOSIS": "✂️ ",
-                    "QUANTIZATION": "📦"}.get(e.event_type, "?")
-            print(f"  Tick {e.tick:02d} | {icon} {e.event_type:<14} | "
-                  f"Node {e.node_index:02d} | "
-                  f"Active: {e.active_before} → {e.active_after} | "
-                  f"{e.reason}")
+            icon = {"NEUROGENESIS": "🧠", "APOPTOSIS": "✂️ ", "QUANTIZATION": "📦"}.get(
+                e.event_type, "?"
+            )
+            print(
+                f"  Tick {e.tick:02d} | {icon} {e.event_type:<14} | "
+                f"Node {e.node_index:02d} | "
+                f"Active: {e.active_before} → {e.active_after} | "
+                f"{e.reason}"
+            )
         print("=" * 60)
 
 
@@ -379,7 +397,7 @@ class MorphogeneticAgent:
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    from engine_core import initialize_engine, extract_belief_snapshot, PAIN_THRESHOLD
+    from engine_core import PAIN_THRESHOLD, extract_belief_snapshot, initialize_engine
 
     print("=" * 60)
     print("  SYNTHETIC EPISTEMIC ENGINE — Phase 2")
@@ -388,42 +406,41 @@ if __name__ == "__main__":
 
     # Boot SVI engine
     svi, guide = initialize_engine(beta=1.5)
-    rng_key    = jax.random.PRNGKey(0)
-    svi_state  = svi.init(rng_key, telemetry={"temp": 45.0, "vram_usage": 22.5})
+    rng_key = jax.random.PRNGKey(0)
+    svi_state = svi.init(rng_key, telemetry={"temp": 45.0, "vram_usage": 22.5})
 
     # Boot Morphogenetic Agent
-    agent = MorphogeneticAgent(max_capacity=MAX_ARENA_CAPACITY,
-                               initial_capacity=INITIAL_CAPACITY)
+    agent = MorphogeneticAgent(max_capacity=MAX_ARENA_CAPACITY, initial_capacity=INITIAL_CAPACITY)
 
     print(f"\n[BOOT] Arena initialised: {agent.arena}\n")
 
     # Simulate 15 ticks: normal → crisis → morphogenesis → recovery
     scenarios = {
-        0:  ("NOMINAL",  {"temp": 46.0, "vram_usage": 23.1}),
-        1:  ("NOMINAL",  {"temp": 46.2, "vram_usage": 23.3}),
-        2:  ("NOMINAL",  {"temp": 46.0, "vram_usage": 23.0}),
-        3:  ("NOMINAL",  {"temp": 46.5, "vram_usage": 23.4}),
-        4:  ("NOMINAL",  {"temp": 46.1, "vram_usage": 23.2}),
-        5:  ("CRISIS",   {"temp": 62.0, "vram_usage": 41.0}),   # Anomaly injected
-        6:  ("CRISIS",   {"temp": 64.0, "vram_usage": 43.0}),
-        7:  ("CRISIS",   {"temp": 63.5, "vram_usage": 42.5}),   # Neurogenesis fires here
-        8:  ("CRISIS",   {"temp": 63.0, "vram_usage": 42.0}),
-        9:  ("RECOVERY", {"temp": 47.0, "vram_usage": 24.0}),
+        0: ("NOMINAL", {"temp": 46.0, "vram_usage": 23.1}),
+        1: ("NOMINAL", {"temp": 46.2, "vram_usage": 23.3}),
+        2: ("NOMINAL", {"temp": 46.0, "vram_usage": 23.0}),
+        3: ("NOMINAL", {"temp": 46.5, "vram_usage": 23.4}),
+        4: ("NOMINAL", {"temp": 46.1, "vram_usage": 23.2}),
+        5: ("CRISIS", {"temp": 62.0, "vram_usage": 41.0}),  # Anomaly injected
+        6: ("CRISIS", {"temp": 64.0, "vram_usage": 43.0}),
+        7: ("CRISIS", {"temp": 63.5, "vram_usage": 42.5}),  # Neurogenesis fires here
+        8: ("CRISIS", {"temp": 63.0, "vram_usage": 42.0}),
+        9: ("RECOVERY", {"temp": 47.0, "vram_usage": 24.0}),
         10: ("RECOVERY", {"temp": 46.5, "vram_usage": 23.5}),
-        11: ("NOMINAL",  {"temp": 46.0, "vram_usage": 23.0}),
-        12: ("NOMINAL",  {"temp": 46.2, "vram_usage": 23.1}),
-        13: ("NOMINAL",  {"temp": 46.0, "vram_usage": 23.0}),
-        14: ("NOMINAL",  {"temp": 46.0, "vram_usage": 23.0}),
+        11: ("NOMINAL", {"temp": 46.0, "vram_usage": 23.0}),
+        12: ("NOMINAL", {"temp": 46.2, "vram_usage": 23.1}),
+        13: ("NOMINAL", {"temp": 46.0, "vram_usage": 23.0}),
+        14: ("NOMINAL", {"temp": 46.0, "vram_usage": 23.0}),
     }
 
     for tick in range(15):
         phase, telemetry = scenarios[tick]
 
         svi_state, total_loss = svi.update(svi_state, telemetry=telemetry)
-        snapshot              = extract_belief_snapshot(svi, svi_state)
-        free_energy           = float(total_loss)
-        eig                   = snapshot["eig"]
-        thermal_mu            = snapshot["beliefs"]["true_thermal"]["mu"]
+        snapshot = extract_belief_snapshot(svi, svi_state)
+        free_energy = float(total_loss)
+        eig = snapshot["eig"]
+        thermal_mu = snapshot["beliefs"]["true_thermal"]["mu"]
 
         # Feed Free Energy to the Morphogenetic Agent
         agent.update(free_energy, pain_threshold=PAIN_THRESHOLD)
@@ -431,7 +448,7 @@ if __name__ == "__main__":
         # Print status
         pain_bar = f"Pain Timer: {agent.sustained_pain_timer}/{PAIN_TICKS_THRESHOLD}"
         print(
-            f"Tick {tick+1:02d} [{phase:<8}] | "
+            f"Tick {tick + 1:02d} [{phase:<8}] | "
             f"FE: {free_energy:>10.2f} | "
             f"KL: {eig:.4f} | "
             f"Thermal: {thermal_mu:.2f}°C | "

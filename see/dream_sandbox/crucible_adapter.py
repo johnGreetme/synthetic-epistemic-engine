@@ -9,12 +9,11 @@ unsat_core() constraint tags into clean semantic bounding boxes for LLM re-promp
 from __future__ import annotations
 
 import importlib.util
-import os
 import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 try:
     from z3 import (
@@ -80,10 +79,10 @@ _CRUCIBLE_MODULE = _resolve_diana_core()
 class SemanticBoundingBox:
     """Semantic bounding box explaining Z3 invariant violations for LLM re-prompting."""
 
-    target_state: Dict[str, Any]
-    unsat_core: List[str]
+    target_state: dict[str, Any]
+    unsat_core: list[str]
     prompt_feedback: str
-    suggested_clamps: Dict[str, Any] = field(default_factory=dict)
+    suggested_clamps: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -92,10 +91,10 @@ class CrucibleVerificationResult:
 
     is_safe: bool
     status: str
-    target_state: Dict[str, Any]
-    unsat_core: List[str] = field(default_factory=list)
-    bounding_box: Optional[SemanticBoundingBox] = None
-    error_message: Optional[str] = None
+    target_state: dict[str, Any]
+    unsat_core: list[str] = field(default_factory=list)
+    bounding_box: SemanticBoundingBox | None = None
+    error_message: str | None = None
 
 
 class CrucibleAdapter:
@@ -111,9 +110,7 @@ class CrucibleAdapter:
     def get_solver(self) -> Any:
         """Initializes a Z3 solver configured with unsat_core tracking and timeout."""
         if Solver is None:
-            raise ImportError(
-                "z3-solver is required. Install via `pip install z3-solver`."
-            )
+            raise ImportError("z3-solver is required. Install via `pip install z3-solver`.")
         solver = Solver()
         try:
             solver.set("timeout", self.timeout_ms)
@@ -124,10 +121,10 @@ class CrucibleAdapter:
 
     def verify_kinematics(
         self,
-        target_state: Dict[str, Any],
-        current_state: Optional[Dict[str, Any]] = None,
-        custom_invariants: Optional[List[Dict[str, Any]]] = None,
-        torque_limit: Optional[float] = None,
+        target_state: dict[str, Any],
+        current_state: dict[str, Any] | None = None,
+        custom_invariants: list[dict[str, Any]] | None = None,
+        torque_limit: float | None = None,
     ) -> CrucibleVerificationResult:
         """Formally verifies cyber-physical invariants and torque limits using Z3."""
         if torque_limit is None:
@@ -137,12 +134,14 @@ class CrucibleAdapter:
 
         if "required_torque" in target_state or "torque" in target_state:
             t_var = "required_torque" if "required_torque" in target_state else "torque"
-            invariants.append({
-                "type": "range",
-                "variable": t_var,
-                "max": torque_limit,
-                "label": f"Kinematic Bound: {t_var} <= {torque_limit} N*m",
-            })
+            invariants.append(
+                {
+                    "type": "range",
+                    "variable": t_var,
+                    "max": torque_limit,
+                    "label": f"Kinematic Bound: {t_var} <= {torque_limit} N*m",
+                }
+            )
 
         if Solver is None:
             return CrucibleVerificationResult(
@@ -153,7 +152,7 @@ class CrucibleAdapter:
             )
 
         solver = self.get_solver()
-        z3_vars: Dict[str, Any] = {}
+        z3_vars: dict[str, Any] = {}
 
         try:
             # 1. Assert target states with tracked tracking labels
@@ -208,11 +207,7 @@ class CrucibleAdapter:
                             z_var <= max_v,
                             Bool(f"{lbl_prefix}: {var_name} <= {max_v}"),
                         )
-                elif (
-                    inv_type == "max_delta"
-                    and current_state
-                    and var_name in current_state
-                ):
+                elif inv_type == "max_delta" and current_state and var_name in current_state:
                     curr_v = current_state[var_name]
                     max_d = inv.get("delta", 50)
                     diff = z_var - curr_v
@@ -271,17 +266,15 @@ class CrucibleAdapter:
 
     def format_semantic_bounding_box(
         self,
-        target_state: Dict[str, Any],
-        unsat_core_tags: List[str],
+        target_state: dict[str, Any],
+        unsat_core_tags: list[str],
         torque_limit: float,
     ) -> SemanticBoundingBox:
         """Formats UNSAT core constraints into a structured semantic veto prompt for LLM regeneration."""
         core_summary = (
-            ", ".join(unsat_core_tags)
-            if unsat_core_tags
-            else "Kinematic Boundary Violation"
+            ", ".join(unsat_core_tags) if unsat_core_tags else "Kinematic Boundary Violation"
         )
-        suggested_clamps: Dict[str, Any] = {}
+        suggested_clamps: dict[str, Any] = {}
 
         for k, v in target_state.items():
             if "torque" in k and isinstance(v, (int, float)) and v > torque_limit:
