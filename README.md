@@ -105,6 +105,17 @@ SEE is designed to bridge probabilistic edge AI with deterministic physical hard
 
 ---
 
+## System Boundaries: What SEE Does NOT Do
+
+To clearly demarcate where SEE sits within the autonomous robotics stack:
+
+* **It is NOT a Chatbot or Generic Prompt Wrapper:** SEE is an embodied cyber-physical cognitive substrate. It does not generate conversational text for end-users; it outputs verifiable kinematic trajectories and compliance/impedance matrices.
+* **It does NOT Interfere with 500–1000 Hz Real-Time Joint Control:** SEE does not replace microsecond-level motor commutation, ESC timing, or 1 kHz Whole-Body Control (WBC) balance loops. High-frequency joint stabilization remains untouched in the real-time RTOS/microcontroller layer (e.g., STM32, Pixhawk, PREEMPT_RT). SEE sits above as the asynchronous cognitive supervisor, injecting verified impedance parameters and kinematic bounds without introducing latency jitter or risking humanoid balance loss.
+* **It does NOT Permit Blind LLM Actuation:** Large Language Models in SEE are strictly confined to the DreamSandbox subconscious simulator. An LLM cannot command a physical motor directly without passing through the deterministic Z3 formal proof gate.
+* **It does NOT Rely on Cloud Backhauls for Safety:** Every edge Forager node carries its own sovereign Z3 Crucible and local FAISS immune registry. If communication to the Queen is severed, the edge node relies on local verification and Limp Mode retreat rather than stalling or crashing.
+
+---
+
 ## Directory Layout
 
 ```text
