@@ -63,8 +63,8 @@ def compute_total_eig(param_map: dict[str, Any]) -> jnp.ndarray:
     mu_q = mu_q_all[:n]
     sigma_q = sigma_q_all[:n]
 
-    sigma_q = jnp.clip(sigma_q, a_min=1e-6)
-    sigma_p = jnp.clip(sigma_p, a_min=1e-6)
+    sigma_q = jnp.clip(sigma_q, 1e-6, None)
+    sigma_p = jnp.clip(sigma_p, 1e-6, None)
 
     return kl_divergence_diagonal_gaussian(mu_q, sigma_q, mu_p, sigma_p)
 

@@ -104,8 +104,8 @@ def compute_total_eig(param_map: dict) -> jnp.ndarray:
     sigma_q = sigma_q_all[:n]
 
     # Clamp sigma to avoid log(0) — numerically safe floor
-    sigma_q = jnp.clip(sigma_q, a_min=1e-6)
-    sigma_p = jnp.clip(sigma_p, a_min=1e-6)
+    sigma_q = jnp.clip(sigma_q, 1e-6, None)
+    sigma_p = jnp.clip(sigma_p, 1e-6, None)
 
     return kl_divergence_diagonal_gaussian(mu_q, sigma_q, mu_p, sigma_p)
 
