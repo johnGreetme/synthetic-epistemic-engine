@@ -99,7 +99,55 @@ SEE is designed to bridge probabilistic edge AI with deterministic physical hard
 
 *   **The Forager Node (Edge/Drone):** Powered by the **NVIDIA Jetson AGX Thor**. Runs the SVI nociception engine, processes real-time telemetry, and clamps physical actuators into Limp Mode if the network drops.
 *   **The Queen Node (Cluster Brain):** Powered by the **NVIDIA RTX 6000 Ada Generation**. Handles heavy LLM causal morphogenesis, mathematically verifies `.resin` mutations via the Z3 Crucible, and broadcasts cryptographic signatures.
-*   **The Hardware Interlock:** Integrates via USB/UART with hardware security modules (e.g., Lilygo T-Dongle S3) and flight controllers (e.g., Pixhawk) to act as a physical guillotine, executing Apoptosis if spoofed telemetry is detected.
+*   **The Hardware Interlock:** Integrates via USB/UART/CAN with hardware security modules and flight controllers (e.g., Pixhawk) to act as a physical guillotine, executing Apoptosis if spoofed telemetry is detected.
+
+---
+
+### Hardware Evolution: From Lab Prototype to Military/Enterprise Grade
+
+```text
+  ┌────────────────────────┐       ┌────────────────────────┐       ┌────────────────────────┐
+  │ Tier 1: Lab Prototype  │  ──►  │ Tier 2: Ruggedized Edge│  ──►  │ Tier 3: Defense / ASIL │
+  │ (LilyGO T-Dongle S3)   │       │ (Industrial LilyGO/CAN)│       │ (Hardware Guillotine)  │
+  └────────────────────────┘       └────────────────────────┘       └────────────────────────┘
+```
+
+#### 1. Tier 1: Developer / Lab Bench Prototype
+* **Hardware**: LilyGO T-Dongle S3 (ESP32-S3 dual-core, USB-C, ST7735 color LCD).
+* **Role**: Rapid developer prototyping, visual Free Energy / SLP counter display, plug-and-play Jetson debugging over serial/UART.
+* **Limitation**: Not vibration-damped, non-isolated GPIO, consumer thermal rating ($0^\circ\text{C}$ to $40^\circ\text{C}$).
+
+#### 2. Tier 2: Field-Ready & Ruggedized Modules (Industrial LilyGO & CAN)
+LilyGO and the open-hardware ecosystem manufacture ruggedized industrial variants designed specifically for field robotics:
+* **LilyGO T-CAN485 / T-Relay**:
+  * **Dual CAN Bus & RS485**: Plugs directly into the robot's internal industrial CAN bus (interfacing directly with actuator nodes).
+  * **Galvanic Optical Isolation**: Protects the compute module from motor back-EMF voltage spikes.
+  * **Wide DC Input ($9\text{V} - 36\text{V}$)**: Powered directly from the robot's high-voltage LiPo battery pack.
+* **LilyGO T-Embed / T-HMI**:
+  * CNC aluminum alloy enclosure, rotary physical interlock, waterproof silicone seals.
+
+#### 3. Tier 3: Enterprise & Defense Production Grade (Hardware-Enforced Guillotine)
+For enterprise humanoids and defense drones where physical tamper resistance and ASIL-D safety are mandated:
+* **Dedicated Hardware Root of Trust (EAL6+ Secure Element)**:
+  * **Microchip ATECC608B / ECC204** or **Infineon OPTIGA™ Trust M**:
+    * Hardware-protected cryptographic key storage in physically shielded tamper-resistant silicon.
+    * Hardware-enforced **Monotonic Counter** that physically cannot be rolled back by a compromised operating system (vital for State-Locked Protocol counter integrity).
+    * Hardware acceleration for Ed25519 signing and verification.
+* **Opto-Isolated Physical Guillotine (Hardware E-Stop)**:
+  * **STMicroelectronics STM32H7 / TI TMS570 (Lockstep Dual-Core)**:
+    * Directly controls a solid-state relay on the flight controller’s `ARM / SAFETY` line or motor bus power.
+    * When Queen broadcasts a verified `TOMBSTONE`, the hardware co-processor cuts motor gate power independently of the main OS in $<1\text{ millisecond}$.
+
+---
+
+## System Boundaries: What SEE Does NOT Do
+
+To clearly demarcate where SEE sits within the autonomous robotics stack:
+
+* **It is NOT a Chatbot or Generic Prompt Wrapper:** SEE is an embodied cyber-physical cognitive substrate. It does not generate conversational text for end-users; it outputs verifiable kinematic trajectories and compliance/impedance matrices.
+* **It does NOT Interfere with 500–1000 Hz Real-Time Joint Control:** SEE does not replace microsecond-level motor commutation, ESC timing, or 1 kHz Whole-Body Control (WBC) balance loops. High-frequency joint stabilization remains untouched in the real-time RTOS/microcontroller layer (e.g., STM32, Pixhawk, PREEMPT_RT). SEE sits above as the asynchronous cognitive supervisor, injecting verified impedance parameters and kinematic bounds without introducing latency jitter or risking humanoid balance loss.
+* **It does NOT Permit Blind LLM Actuation:** Large Language Models in SEE are strictly confined to the DreamSandbox subconscious simulator. An LLM cannot command a physical motor directly without passing through the deterministic Z3 formal proof gate.
+* **It does NOT Rely on Cloud Backhauls for Safety:** Every edge Forager node carries its own sovereign Z3 Crucible and local FAISS immune registry. If communication to the Queen is severed, the edge node relies on local verification and Limp Mode retreat rather than stalling or crashing.
 
 ---
 
