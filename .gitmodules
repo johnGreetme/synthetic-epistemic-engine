@@ -1,0 +1,3 @@
+[submodule "diana_core"]
+	path = diana_core
+	url = https://github.com/johnGreetme/diana-os-core.git
