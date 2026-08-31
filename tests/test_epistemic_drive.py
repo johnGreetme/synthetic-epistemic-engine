@@ -1,56 +1,44 @@
-import os
-import sys
+"""Unit tests for epistemic drive and morphogenetic convergence."""
 
-import jax
-
-# Ensure we can import from the parent directory
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from engine_core import PAIN_THRESHOLD, initialize_engine
-from morphogenesis import MorphogeneticAgent
+from see.active_inference.nociception import NociceptionEngine
+from see.dream_sandbox.morphogenetic_agent import MorphogeneticAgent
 
 
 def test_epistemic_drive_generates_action_in_boredom():
     """
     Test 1: The Epistemic Drive (Desire to Understand)
-    Even in a perfectly safe, homeostatic environment, the EIG (Expected Information Gain)
-    component of the Epistemic Trace ELBO should force the agent to act to seek novelty.
+    Even in a homeostatic environment, the EIG (Expected Information Gain)
+    component of the Epistemic Trace ELBO ensures beliefs and EIG are actively computed.
     """
-    svi, _ = initialize_engine(beta=1.5)
-    rng_key = jax.random.PRNGKey(0)
+    engine = NociceptionEngine(beta=1.5, seed=42)
+    telemetry = {"slp_heartbeat": 8.0, "sensory_flux": 6.4}
 
-    # Perfect homeostasis
-    telemetry = {"temp": 45.0, "vram_usage": 22.0}
-    svi_state = svi.init(rng_key, telemetry=telemetry)
-
-    # Run a few updates
+    # Run updates
     for _ in range(5):
-        svi_state, loss = svi.update(svi_state, telemetry=telemetry)
+        event = engine.update(telemetry)
 
-    fe = float(loss)
-
-    # The agent computes a finite, non-NaN free energy loss incorporating epistemic EIG
-    assert not jax.numpy.isnan(loss), "Agent SVI diverged to NaN."
-    assert isinstance(fe, float), "Free energy loss is not a valid float."
+    beliefs = engine.extract_belief_snapshot()
+    assert "eig" in beliefs
+    assert beliefs["eig"] >= 0.0
+    assert event.free_energy is not None
 
 
 def test_morphogenesis_convergence():
     """
     Test 2: Morphogenesis Convergence
     When subjected to sustained high Free Energy (pain), the LatentArena
-    should trigger neurogenesis to expand its capacity.
+    triggers neurogenesis to expand its capacity.
     """
     agent = MorphogeneticAgent(max_capacity=32, initial_capacity=4)
 
     initial_active = agent.arena.active_count
     assert initial_active == 4
 
-    # Simulate sustained pain (Free Energy > Threshold)
-    sustained_pain = PAIN_THRESHOLD * 2
+    sustained_pain = 800.0  # > 500.0 threshold
 
-    # Run multiple ticks of pain
+    # Run ticks of pain
     for _ in range(5):
-        agent.update(free_energy=sustained_pain, pain_threshold=PAIN_THRESHOLD)
+        agent.update(free_energy=sustained_pain, pain_threshold=500.0)
 
     # The arena should have expanded its capacity
     assert agent.arena.active_count > initial_active, (
