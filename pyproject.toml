@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 authors = [
     { name = "Kytin Swarm Architecture Team" }
 ]
+license = { text = "Apache-2.0" }
 dependencies = [
     "jax>=0.4.20",
     "jaxlib>=0.4.20",
