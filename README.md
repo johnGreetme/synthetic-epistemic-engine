@@ -6,9 +6,9 @@
 [![Architecture: diana-os-core Verified Submodule](https://img.shields.io/badge/Architecture-diana--os--core%20Verified%20Submodule-success)](https://github.com/johnGreetme/diana-os-core)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-A biologically-inspired, decentralized, zero-trust robotic swarm intelligence that implements **Active Inference**, **Causal Morphogenesis**, **LLM DreamSandbox Verification**, **Metabolic ZeroMQ Gossipsub**, and the **Ed25519 Tombstone Protocol**.
+A biologically-inspired, hardware-enforced robotic swarm intelligence built to execute the **State-Locked Protocol**.
 
-SEE builds upon the immutable `diana-os-core` formal verification microkernel.
+SEE transforms passive sensors into sovereign, self-resolving nodes. By combining **Active Inference**, **Causal Morphogenesis**, and **LLM DreamSandbox Verification** on top of the immutable `diana-os-core` Z3 microkernel, SEE mathematically guarantees that AI-generated physical actions are safe before they ever reach the actuators. It is the cognitive engine powering the **Kytin Swarm**.
 
 ---
 
@@ -31,12 +31,22 @@ SEE builds upon the immutable `diana-os-core` formal verification microkernel.
    - Zero-trust Ed25519 cryptographic enclaves for all message envelopes.
 
 4. **Clawhub Registry & Tombstone Protocol (`see.immunity`)**:
-   - FAISS `IndexFlatL2` 6-dimensional anomaly vector memory.
+   - Downloads and deduplicates verified Skills from **Clawhub** via a FAISS `IndexFlatL2` 6-dimensional anomaly vector memory.
    - Eureka collision deduplication: requires $>20\%$ mechanical efficiency gain (`fe_reduction > existing * 1.20`) when $L2 < 0.1$.
-   - Physics anti-spoofing detection (`fe_reduction > 50000.0` or `pre_morph_fe > 100000.0`) triggers global key revocation and Apoptosis.
+   - Physics anti-spoofing detection triggers global key revocation and Apoptosis via the Tombstone broadcast.
 
 5. **Split-Brain Sovereignty (Limp Mode) (`see.nodes`)**:
    - Offline foragers clamp Z3 torque limits to conservative bound ($1.0\text{ N}\cdot\text{m}$) and reject unverified LLM mutations.
+
+---
+
+## Kytin Swarm: Physical Hardware Topology
+
+SEE is designed to bridge probabilistic edge AI with deterministic physical hardware, specifically optimized for the following cluster architecture (the Apiary):
+
+*   **The Forager Node (Edge Edge/Drone):** Powered by the **NVIDIA Jetson AGX Thor**. Runs the SVI nociception engine, processes real-time telemetry, and clamps physical actuators into Limp Mode if the network drops.
+*   **The Queen Node (Cluster Brain):** Powered by the **NVIDIA RTX 6000 Ada Generation**. Handles heavy LLM causal morphogenesis, mathematically verifies `.resin` mutations via the Z3 Crucible, and broadcasts cryptographic signatures.
+*   **The Hardware Interlock:** Integrates via USB/UART with hardware security modules (e.g., Lilygo T-Dongle S3) and flight controllers (e.g., Pixhawk) to act as a physical guillotine, executing Apoptosis if spoofed telemetry is detected.
 
 ---
 
