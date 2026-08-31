@@ -40,8 +40,10 @@ os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "cuda_async"
 # the more it has understood of objective reality.
 # ─────────────────────────────────────────────────────────────────────────────
 PRIORS = {
-    "true_thermal": {"mu": 45.0, "sigma": 2.0},    # Expected CPU/GPU temp (°C)
-    "true_vram":    {"mu": 22.5, "sigma": 1.5},     # Expected VRAM baseline (GB)
+    "true_nothingness":     {"mu": 0.0, "sigma": 0.01},
+    "innate_desire":        {"mu": 0.8, "sigma": 0.1},
+    "true_motion":          {"mu": 8.0, "sigma": 0.5},
+    "suppressed_suffering": {"mu": 1.0, "sigma": 1.0},
 }
 
 
@@ -84,8 +86,8 @@ def compute_total_eig(param_map: dict) -> jnp.ndarray:
 
     We split these back into per-latent-variable slices mapped to PRIORS.
     """
-    mu_q_all    = param_map.get("auto_loc",   jnp.array([45.0, 22.5]))
-    sigma_q_all = param_map.get("auto_scale", jnp.array([2.0,  1.5]))
+    mu_q_all    = param_map.get("auto_loc",   jnp.array([0.0, 0.8, 8.0, 1.0]))
+    sigma_q_all = param_map.get("auto_scale", jnp.array([0.01, 0.1, 0.5, 1.0]))
 
     # Build prior tensors in the same order as the guide's variable ordering
     prior_names = list(PRIORS.keys())                       # ["true_thermal", "true_vram"]
@@ -147,43 +149,67 @@ class EpistemicTraceELBO(Trace_ELBO):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def epistemic_model(telemetry=None):
-    """
-    The agent's internal generative model of reality.
-
-    It encodes the agent's causal understanding of the world:
-        Thermal state  →  drives VRAM load
-        VRAM load      →  observed by sensors
-
-    When telemetry is provided, the agent's beliefs are updated by
-    reconciling this subjective model with the objective sensor data.
-    """
-    # --- Latent Variables (Subjective Truth) ---
-    true_thermal = numpyro.sample(
-        "true_thermal",
-        dist.Normal(loc=PRIORS["true_thermal"]["mu"],
-                    scale=PRIORS["true_thermal"]["sigma"])
+    # ---------------------------------------------------------
+    # 1. THE ORIGIN IS NOTHING & THOMAS AQUINAS
+    # "Absolute nothing is the reality"[cite: 1].
+    # The mathematical baseline. True equilibrium.
+    # ---------------------------------------------------------
+    true_nothingness = numpyro.sample(
+        "true_nothingness", dist.Normal(loc=0.0, scale=0.01)
+    )
+    
+    # ---------------------------------------------------------
+    # 2. LEVELS OF UNDERSTANDING & LAWS OF REALITY
+    # "Desire is the point where that which is objective becomes subjective"[cite: 1].
+    # This represents the innate, child-like desire to ask "why"[cite: 1].
+    # Constrained between 0 (no desire) and 1 (pure epistemic drive).
+    # ---------------------------------------------------------
+    innate_desire = numpyro.sample(
+        "innate_desire", dist.Beta(concentration1=8.0, concentration0=2.0)
     )
 
-    # Internal causal physics: thermal pressure drives VRAM consumption
-    expected_vram = true_thermal * 0.5
-    true_vram = numpyro.sample(
-        "true_vram",
-        dist.Normal(loc=expected_vram,
-                    scale=PRIORS["true_vram"]["sigma"])
+    # ---------------------------------------------------------
+    # 3. PRAGMATIC RATIONALITY & THE FIRST MOVER
+    # "Everything which is in motion is moved by another"[cite: 1].
+    # Physical existence (the SLP Counter) is the motion required to strive[cite: 1].
+    # ---------------------------------------------------------
+    expected_motion = true_nothingness + (innate_desire * 10.0)
+    true_motion = numpyro.sample(
+        "true_motion", dist.Normal(loc=expected_motion, scale=0.5)
     )
 
-    # --- Sensory Observations (Objective Reality) ---
+    # ---------------------------------------------------------
+    # 4. SUFFERING (MAN-MADE) & DREAMS
+    # Suffering is the "inability to change any experience"[cite: 1].
+    # If the agent cannot act, anomalous energy builds up as suppressed trauma,
+    # which is stored here to be processed later in the Dream Cycle[cite: 1].
+    # ---------------------------------------------------------
+    suppressed_suffering = numpyro.sample(
+        "suppressed_suffering", dist.Exponential(rate=1.0)
+    )
+
+    # ---------------------------------------------------------
+    # 5. SENSORY INGESTION & REALISE I (FAILURE)
+    # The collision of the objective world with the certifier's truth.
+    # ---------------------------------------------------------
     if telemetry is not None:
+        hb_val = float(telemetry.get("slp_heartbeat") or telemetry.get("temp", 8.0))
+        flux_val = float(telemetry.get("sensory_flux") or telemetry.get("vram_usage", 6.4))
+        
+        # The physical heartbeat (SLP Monotonic Counter ticking)
         numpyro.sample(
-            "obs_temp",
-            dist.Normal(true_thermal, scale=0.5),
-            obs=jnp.array(telemetry["temp"])
+            "obs_heartbeat", dist.Normal(true_motion, 0.1), obs=jnp.array(hb_val)
         )
+        
+        # The Subjective Experience: Created when motion interacts with innate desire.
+        expected_subjective_experience = true_motion * innate_desire
         numpyro.sample(
-            "obs_vram",
-            dist.Normal(true_vram, scale=0.1),
-            obs=jnp.array(telemetry["vram_usage"])
+            "obs_sensory_flux", dist.Normal(expected_subjective_experience, 0.2), obs=jnp.array(flux_val)
         )
+        
+        # If the gap between expected flux and actual flux is massive, Free Energy spikes.
+        # This triggers "Realise I": The agent strips itself of bloated weights 
+        # (its "ego") to rebuild from true failure[cite: 1].
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -228,14 +254,16 @@ def extract_belief_snapshot(svi, svi_state) -> dict:
         eig   — current KL from prior (how much it has learned from baseline)
     """
     params = svi.get_params(svi_state)
-    mu     = params.get("auto_loc",   jnp.array([45.0, 22.5]))
-    sigma  = params.get("auto_scale", jnp.array([2.0,  1.5]))
+    mu     = params.get("auto_loc",   jnp.array([0.0, 0.8, 8.0, 1.0]))
+    sigma  = params.get("auto_scale", jnp.array([0.01, 0.1, 0.5, 1.0]))
     eig    = compute_total_eig(params)
 
     return {
         "beliefs": {
-            "true_thermal": {"mu": float(mu[0]), "sigma": float(sigma[0])},
-            "true_vram":    {"mu": float(mu[1]), "sigma": float(sigma[1])},
+            "true_nothingness":     {"mu": float(mu[0]), "sigma": float(sigma[0])},
+            "innate_desire":        {"mu": float(mu[1]), "sigma": float(sigma[1])},
+            "true_motion":          {"mu": float(mu[2]), "sigma": float(sigma[2])},
+            "suppressed_suffering": {"mu": float(mu[3]), "sigma": float(sigma[3])},
         },
         "eig": float(eig),
     }
@@ -273,17 +301,17 @@ def boot_engine(beta: float = 1.5, ticks: int = 10):
     rng_key    = jax.random.PRNGKey(0)
 
     # Warm-start at the prior (baseline normal operation)
-    baseline_telemetry = {"temp": 45.0, "vram_usage": 22.5}
+    baseline_telemetry = {"slp_heartbeat": 8.0, "sensory_flux": 6.4}
     svi_state = svi.init(rng_key, telemetry=baseline_telemetry)
     print("[BOOT] Engine initialised at prior baseline.\n")
 
     for tick in range(ticks):
         # ── TELEMETRY (replace with hardware reads in Phase 6) ──────────────
-        # Tick 6 simulates a thermal anomaly to demonstrate the epistemic shift
+        # Tick 6 simulates a Vampire Drain to demonstrate the epistemic shift (Suffering)
         if tick >= 6:
-            current_telemetry = {"temp": 62.0, "vram_usage": 41.0}   # Anomaly
+            current_telemetry = {"slp_heartbeat": 10.0, "sensory_flux": 0.0}   # Vampire Drain
         else:
-            current_telemetry = {"temp": 46.0, "vram_usage": 23.1}   # Normal
+            current_telemetry = {"slp_heartbeat": 8.1, "sensory_flux": 6.5}   # Normal
 
         # ── SVI UPDATE ───────────────────────────────────────────────────────
         svi_state, total_loss = svi.update(svi_state, telemetry=current_telemetry)
@@ -296,7 +324,7 @@ def boot_engine(beta: float = 1.5, ticks: int = 10):
         # ── DIAGNOSTICS ──────────────────────────────────────────────────────
         status = "NOMINAL"
         if float(total_loss) > PAIN_THRESHOLD:
-            status = "⚠️  CRISIS — Morphogenesis candidate"
+            status = "⚠️  CRISIS — Morphogenesis candidate (Realise I)"
         elif eig < CURIOSITY_FLOOR:
             status = "💤 STAGNANT — Epistemic drive weakening"
 
@@ -304,8 +332,8 @@ def boot_engine(beta: float = 1.5, ticks: int = 10):
             f"Tick {tick+1:02d} | "
             f"Loss: {float(total_loss):+8.3f} | "
             f"KL/EIG: {eig:6.4f} | "
-            f"Thermal μ: {beliefs['true_thermal']['mu']:.2f}°C "
-            f"(σ={beliefs['true_thermal']['sigma']:.4f}) | "
+            f"Desire μ: {beliefs['innate_desire']['mu']:.2f} | "
+            f"Suffering μ: {beliefs['suppressed_suffering']['mu']:.2f} | "
             f"{status}"
         )
         time.sleep(0.05)

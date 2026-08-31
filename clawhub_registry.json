@@ -1,30 +1,86 @@
 [
   {
-    "skill_id": "c044feb2",
+    "skill_id": "56db77df",
     "node_id": "queen-ada",
     "delta": {
-      "mutation_id": "d2c04405-a83c-41f8-bbaa-b384b80f5857",
+      "mutation_id": "1697801d-2fb4-447d-aca8-990dbd925074",
       "slot_index": 4,
       "weight_dim": 8,
-      "weight_b64": "+UzduwlTIzxLECC79/4qPGa9CLyi9kI7GIF/vN3HMbo=",
+      "weight_b64": "Ia1Nuw9fSDqt/Su7tZu8O2k9KbxR3Jk8c/4ku6bAdzs=",
       "anomaly_telemetry": {
-        "temp": 65.0,
-        "vram_usage": 44.0
+        "slp_heartbeat": 10.2,
+        "sensory_flux": 0.0
       },
       "anomaly_vector": [
-        65.0,
-        44.0,
-        25.952239990234375,
-        20.0,
-        21.5,
-        0.519044816493988
+        10.199999809265137,
+        0.0,
+        0.9633729457855225,
+        2.200000047683716,
+        -6.400000095367432,
+        0.019267458468675613
       ],
-      "pre_morph_fe": 25952.240234375,
-      "post_morph_fe": 24328.755859375,
-      "fe_reduction": 1623.484375,
-      "timestamp": 1787851224.4303842
+      "pre_morph_fe": 963.3729248046875,
+      "post_morph_fe": 289.0118774414062,
+      "fe_reduction": 674.3610473632813,
+      "timestamp": 1787921519.263832
     },
-    "resin_text": "skill MorphogeneticImmuneResponse {\n  version:      \"1.0.0\"\n  skill_id:     \"c044feb2\"\n  author_node:  \"queen-ada\"\n  created_at:   1787851224\n\n  // What sensory pattern triggers this skill\n  trigger {\n    sensor:     \"telemetry.thermal_vram_matrix\"\n    condition:  \"free_energy > 20761.8\"\n    temp_range: [60.0, 70.0]\n    vram_range: [39.0, 49.0]\n  }\n\n  // The structural topology patch\n  topology_patch {\n    action:      \"activate_latent_slot\"\n    slot_index:  4\n    weight_dim:  8\n    weight_b64:  \"+UzduwlTIzxLECC79/4qPGa9CLyi9kI7GIF/vN3H...\"\n  }\n\n  // Validation \u2014 Forager must verify FE drops after applying\n  validation {\n    expected_fe_reduction:   1623.48\n    min_fe_reduction_pct:    6.3\n    max_stabilization_ticks: 10\n  }\n}",
-    "created_at": 1787851224.430418
+    "created_at": 1787921519.2665422,
+    "signature": "2hOXbj6kLQ3lwvsHixQL0voqHqJKvEScDKee+4KyQMi4VP9fByaLQJkqiXqEA+X91QwEQHMDJrvsSLbqTZcqBw=="
+  },
+  {
+    "skill_id": "5cf7d417",
+    "node_id": "queen-ada",
+    "delta": {
+      "mutation_id": "9b46334b-4b69-4160-a566-caf76e6f6231",
+      "slot_index": 2,
+      "weight_dim": 8,
+      "weight_b64": "CzWOulKx2T33YGc/GvGsvaKJgr6Uyxg/gsrxPjgzLT8=",
+      "anomaly_telemetry": {
+        "slp_heartbeat": 11.0,
+        "sensory_flux": 0.0
+      },
+      "anomaly_vector": [
+        11.0,
+        0.0,
+        0.8999999761581421,
+        3.0,
+        -6.400000095367432,
+        0.017999999225139618
+      ],
+      "pre_morph_fe": 900.0,
+      "post_morph_fe": 800.0,
+      "fe_reduction": 100.0,
+      "timestamp": 1787921521.576055
+    },
+    "created_at": 1787921521.5782988,
+    "signature": "X/GbFEElA8ftHzTnUrg7+MTz575dZkdn++xoOBK9+ZDaZeW/VS9fLGEUkwwVCAiFtPVCU+LLogzfmt7EIwbTCg=="
+  },
+  {
+    "skill_id": "0957ee5f",
+    "node_id": "queen-ada",
+    "delta": {
+      "mutation_id": "3e58ead5-66c4-49e4-b3f2-05901eabf711",
+      "slot_index": 2,
+      "weight_dim": 8,
+      "weight_b64": "CzWOulKx2T33YGc/GvGsvaKJgr6Uyxg/gsrxPjgzLT8=",
+      "anomaly_telemetry": {
+        "slp_heartbeat": 11.0,
+        "sensory_flux": 0.0
+      },
+      "anomaly_vector": [
+        11.0,
+        0.0,
+        3.5,
+        3.0,
+        -6.400000095367432,
+        0.07000000029802322
+      ],
+      "pre_morph_fe": 3500.0,
+      "post_morph_fe": 950.0,
+      "fe_reduction": 2550.0,
+      "timestamp": 1787921521.578441
+    },
+    "created_at": 1787921521.580257,
+    "signature": "4fw7XfyUnG/FWAXzOWJ2sC4o/zzusweeIwDnoPeGWzDeJnmdXp7Vn7GSJOJaleW1lEW6Bm9IBVTY127VPNtDDQ=="
   }
 ]

@@ -1,36 +1,46 @@
-# Architecture Guide for Builder Agents
+# Synthetic Epistemic Engine (SEE)
+**Architecture & Implementation Guide**
 
-If you are an LLM or Builder Agent continuing work on this repository, this document outlines the fundamental logic and structural pillars of the Synthetic Epistemic Engine.
+The Synthetic Epistemic Engine is a biologically-inspired, decentralized, zero-trust robotic swarm intelligence. It moves beyond static, deterministic automation into **Causal Morphogenesis**—allowing physical hardware to feel pain, hallucinate structural bypasses, mathematically verify those hallucinations, and distribute the learned skills globally in milliseconds.
 
-## Core Philosophy
-This codebase abandons reinforcement learning. There is no external reward. The agent is driven exclusively by the **Epistemic Trace ELBO**:
-`Total_Loss = Pragmatic_ELBO - beta * Expected_Information_Gain`
+## 1. Phase 1: Artificial Nociception (Physical Pain)
+Robots typically rely on predefined error codes. The Swarm relies on **Active Inference** (Free Energy Principle).
+- **NumPyro SVI**: We utilize Stochastic Variational Inference (SVI) to continuously model the robot's expected sensory state (SE(3) poses, torque limits, impedance matrices) against the actual incoming telemetry.
+- **The Free Energy (FE) Scalar**: When a Forager node encounters an unmodeled anomaly (like a jammed door or complex physical blockage), the divergence between the expected model and reality spikes. This produces a unified scalar of "Surprise," which the engine interprets as physical **Pain**.
+- **The Threshold**: If the FE scalar exceeds a critical pain threshold, it triggers Phase 2: Neurogenesis.
 
-The agent *wants* to minimize free energy (survive) but is mathematically penalized if it doesn't explore novelty (EIG). This creates a restless, curious entity.
+## 2. Phase 2: The DreamSandbox (LLM Generative Bypass)
+When the robotic hardware enters a state of high physical agony, it pauses standard execution and queries an internal Large Language Model (e.g., Llama 3 running on an edge Jetson AGX Thor).
+- **Morphogenetic Agent**: The LLM is provided a semantic bounding box of the physical parameters (SE(3) vectors, stiffness/damping matrices) and the current anomaly telemetry.
+- **Hallucination as a Tool**: The LLM generates topological bypasses—such as realizing that if it cannot push torque past 5.0 (bulldozer), it can increase the SE(3) arc radius and lower impedance stiffness to use gravity and leverage to bypass the blockage (martial artist).
 
-## Component Map
+## 3. Phase 3: The Z3 Crucible & JAX (Mathematical Verification)
+LLM hallucinations are inherently dangerous and can physically destroy robotic hardware.
+- **D.I.A.N.A. OS**: Before any LLM mutation is executed on the physical chassis, it is compiled into a strict `.resin` Domain Specific Language.
+- **Z3 Constraint Solver & JAX**: The `.resin` payload is passed through a deterministic Z3 theorem prover and a JAX rigid-body physics simulation.
+- **Physical Survival**: If the LLM hallucinates an instruction that violates kinematic limits or requests infinite torque, the Z3 Crucible shatters the simulation and rejects the payload. Only mathematically verified, physically sound structural changes are allowed to manifest in reality.
 
-### 1. The Core (`engine_core.py`)
-Uses `JAX` and `NumPyro` to perform Stochastic Variational Inference (SVI) at high speeds. It maintains the generative model and calculates the Free Energy baseline.
+## 4. Phase 4: Zero-Trust Swarm Topology (P2P Mesh)
+Once a Forager discovers and verifies a novel bypass, it must propagate it to the Swarm.
+- **ZeroMQ Mesh**: The Swarm utilizes an asynchronous `zmq.PUSH`/`zmq.PULL` pipeline for submitting mutations to the Queen, and a `zmq.PUB`/`zmq.SUB` Gossipsub broadcast for the Queen to distribute compiled skills.
+- **Clawhub Registry**: Skills are injected into a local FAISS vector database. When a new node encounters an anomaly, it queries its local FAISS registry for a similar anomaly vector. If a match is found, the node applies the patch and achieves instant immunity without suffering the original pain.
 
-### 2. Causal Morphogenesis (`morphogenesis.py`)
-When Free Energy exceeds the `PAIN_THRESHOLD` (a crisis), the agent modifies its own network topology. We use a `LatentArena` (a masked tensor of fixed maximum capacity) to avoid expensive JAX JIT recompilations during neurogenesis. 
+### 4.1 Cryptographic Enclaves (Ed25519)
+The Swarm operates on a strict Zero-Trust architecture using the `cryptography` library.
+- **The PUSH**: Foragers hash and sign their mutation payloads using a unique local Ed25519 private key.
+- **The PUB**: The Queen verifies the Forager's signature, compiles the `.resin` skill, and signs the final payload with the **Swarm Master Private Key**. Foragers verify this master signature before injecting the skill into their FAISS registries.
 
-### 3. The Certifier (`certifier_action_space.py`)
-Acts as the bridge between the generative mind and physical reality. It imports the **Kytin State-Locked Protocol (SLP)** C++ SDK via `ctypes`. Any action generated by the engine must be granted a "Proof of Life" token from the physical TPM 2.0. If the hardware vetos the action (e.g. it violates `NO_PHYSICAL_HARM`), the intent is routed to the Dream Cycle.
+### 4.2 The Tombstone Protocol (Automated Apoptosis)
+If an adversary physically captures a Jetson node, extracts the Ed25519 private key, and uses a laptop to spoof network payloads, the cryptographic signatures will appear valid.
+- **Physics as the Gatekeeper**: The Queen runs a preliminary mathematical check. If the incoming payload claims a physically impossible Free Energy reduction (e.g., `fe_reduction = 999,999`), the Queen instantly classifies the payload as `SPOOFED`.
+- **The Kill-Switch**: The Queen silently drops the payload, adds the stolen public key to its `revoked_keys` blacklist, and broadcasts a `b"TOMBSTONE"` payload.
+- **Apoptosis**: Healthy Foragers add the key to their mesh blacklists. The captured hardware, upon receiving a Tombstone for its *own* identity, executes Apoptosis—gracefully self-terminating all processes and "playing dead" to protect live RAM states from the adversary.
 
-### 4. The Dream Cycle (`dream_cycle.py`)
-The offline subconscious. Anomaly queues from vetoed or unresolved waking experiences are safely synthesized here in latent space by relaxing the prior constraints (`sigma`), allowing for vast, unconstrained morphogenesis without physical risk.
+### 4.3 Advanced Swarm Dynamics
+To ensure the Swarm remains resilient in industrial deployment environments:
+- **Metabolic Triage**: The Queen's ZeroMQ `PULL` socket ingest acts only as a high-speed buffer, dumping payloads into a thread-safe `queue.PriorityQueue` sorted by the magnitude of the Forager's physical pain (`-pre_morph_fe`). The Queen's worker thread processes the queue, ensuring robots in the highest mathematical agony are saved first.
+- **Eureka Collisions**: Before simulating an incoming mutation, the Queen queries its FAISS database. If multiple Foragers solve the same anomaly simultaneously, the Queen requires the new mutation to be **>20% more mechanically efficient** than the stored skill. Inferior redundant mutations are instantly discarded to save compute.
+- **Split-Brain Sovereignty (Limp Mode)**: If a Forager loses its ZeroMQ uplink to the Queen, it relies on its local FAISS registry for known skills. If it hits a *novel* anomaly offline, it overrides unverified LLM hallucinations and clamps its Z3 torque limits to a strictly conservative bound (e.g., `1.0 N*m`). It executes a "Limp Mode" retreat, refusing to damage itself until the network is restored and the Queen can verify the new skills.
 
-### 5. Swarm Intelligence (`swarm.py`)
-Implements a ZeroMQ Gossipsub topology.
-- **Foragers:** Edge nodes experiencing reality.
-- **The Queen:** Central validation node (e.g., RTX 6000 Ada) that validates morphogenetic discoveries, distills them into `.resin` payload formats, and broadcasts them to the swarm.
-
-### 6. Physical Deployment (`diana_deployment.py`, `Dockerfile.l4t`, `kytin-slp.service`)
-The low-level hardware integration loop targeting NVIDIA JetPack 6+. It downsamples ROS 2 telemetry to feed the cognitive engine. It relies on the systemd watchdog to execute the hardware guillotine if the engine hangs.
-
-## Builder Guidelines
-- **NEVER** break the `LatentArena` fixed-shape paradigm in `morphogenesis.py`.
-- **ALWAYS** route failed Kytin SLP checks to the `dream_queue`. The agent must learn from failure.
-- Ensure all new physical actions have corresponding Z3 logic in the D.I.A.N.A OS firewall definitions.
+---
+*Generated for the Kytin Swarm Architecture.*

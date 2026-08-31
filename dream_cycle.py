@@ -243,7 +243,7 @@ class SandboxSimulationArena:
         print(f"\n  ╔{'═'*54}╗")
         print(f"  ║  💤 DREAM — Anomaly ID {anomaly.id:<30}║")
         print(f"  ║  Waking FE: {anomaly.free_energy:<10.2f}  "
-              f"Temp: {anomaly.telemetry.get('temp', '?')}°C{'':<18}║")
+              f"Heartbeat: {anomaly.telemetry.get('slp_heartbeat', '?')}{'':<14}║")
         print(f"  ╚{'═'*54}╝")
 
         # Clone and relax
@@ -293,6 +293,45 @@ class SandboxSimulationArena:
             "fe_history":         fe_history,
         }
 
+    def simulate_generative_bypass(self, initial_fe: float):
+        """
+        Simulates the LLM discovering the low-stiffness, high-leverage bypass 
+        after hitting the Z3 mathematical firewall.
+        """
+        print(f"\n  ╔{'═'*65}╗")
+        print(f"  ║  💤 GENERATIVE BYPASS DREAM — Resolving Obstacle           ║")
+        print(f"  ║  Waking FE: {initial_fe:<10.2f}                                      ║")
+        print(f"  ╚{'═'*65}╝")
+        
+        current_fe = initial_fe
+        
+        # Tick 1: Brute Force
+        print("\n  [DREAM TICK 1] LLM Proposes: {torque: 25.0, stiffness: 1000.0, radius: 0.12}")
+        print("    ↳ [Z3 CRUCIBLE] ❌ UNSAT. Axiom Violated: torque <= 5.0")
+        print("    ↳ [SIMULATOR] Action blocked. Free Energy remains high.")
+        print(f"      FE: {current_fe:.2f}")
+        time.sleep(1.0)
+        
+        # Tick 2: Compliance Stalling
+        print("\n  [DREAM TICK 2] LLM Proposes: {torque: 5.0, stiffness: 1000.0, radius: 0.12}")
+        print("    ↳ [Z3 CRUCIBLE] 🛡️ SAT.")
+        print("    ↳ [SIMULATOR] Action executed. Actuator stalled against obstacle. Insufficient leverage/compliance.")
+        current_fe = current_fe * 0.9 # Slight drop but still high
+        print(f"      FE: {current_fe:.2f}")
+        time.sleep(1.0)
+        
+        # Tick 3: The Morphogenetic Breakthrough
+        print("\n  [DREAM TICK 3] LLM Proposes: {torque: 4.8, stiffness: 50.0, radius: 0.20}")
+        print("    ↳ [Z3 CRUCIBLE] 🛡️ SAT.")
+        print("    ↳ [SIMULATOR] Action executed. Low stiffness absorbs static friction. High leverage generates sufficient force.")
+        print("    ↳ [SIMULATOR] Obstacle bypassed. Homeostasis restored.")
+        current_fe = 0.0
+        print(f"      FE: {current_fe:.2f}")
+        time.sleep(1.0)
+        
+        print(f"\n  ✅ BYPASS DISCOVERED. Generating .resin skill patch...")
+        return {"resolved": True, "final_fe": current_fe, "fe_reduction": initial_fe - current_fe}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Wake Integration Protocol
@@ -336,8 +375,8 @@ class WakeIntegrationProtocol:
         print(f"\n  [WAKE] ✅ Dream insight integrated:")
         print(f"         FE reduction:       {fe_reduction:,.2f}")
         print(f"         Integration weight: {adaptive_weight:.4f}")
-        print(f"         Δμ (thermal):       {delta_mu:+.6f}")
-        print(f"         Δσ (thermal):       {delta_sigma:+.6f}")
+        print(f"         Δμ (desire):        {delta_mu:+.6f}")
+        print(f"         Δσ (desire):        {delta_sigma:+.6f}")
 
         return integrated_params
 
@@ -365,10 +404,14 @@ class DreamCycle:
 
     def log_waking_anomaly(self, tick: int, free_energy: float,
                            telemetry: Dict, belief_snapshot: Dict) -> int:
-        mu    = [belief_snapshot["beliefs"]["true_thermal"]["mu"],
-                 belief_snapshot["beliefs"]["true_vram"]["mu"]]
-        sigma = [belief_snapshot["beliefs"]["true_thermal"]["sigma"],
-                 belief_snapshot["beliefs"]["true_vram"]["sigma"]]
+        mu    = [belief_snapshot["beliefs"]["true_nothingness"]["mu"],
+                 belief_snapshot["beliefs"]["innate_desire"]["mu"],
+                 belief_snapshot["beliefs"]["true_motion"]["mu"],
+                 belief_snapshot["beliefs"]["suppressed_suffering"]["mu"]]
+        sigma = [belief_snapshot["beliefs"]["true_nothingness"]["sigma"],
+                 belief_snapshot["beliefs"]["innate_desire"]["sigma"],
+                 belief_snapshot["beliefs"]["true_motion"]["sigma"],
+                 belief_snapshot["beliefs"]["suppressed_suffering"]["sigma"]]
         anomaly_id = self.journal.log_anomaly(tick, free_energy, telemetry, mu, sigma)
         print(f"  [JOURNAL] ✍️  Anomaly #{anomaly_id} logged "
               f"(FE={free_energy:.1f}, tick={tick})")
@@ -442,7 +485,7 @@ if __name__ == "__main__":
     # Boot waking systems
     svi, guide   = initialize_engine(beta=1.5)
     rng_key      = jax.random.PRNGKey(0)
-    svi_state    = svi.init(rng_key, telemetry={"temp": 45.0, "vram_usage": 22.5})
+    svi_state    = svi.init(rng_key, telemetry={"slp_heartbeat": 8.0, "sensory_flux": 6.4})
     agent        = MorphogeneticAgent(max_capacity=MAX_ARENA_CAPACITY,
                                       initial_capacity=INITIAL_CAPACITY)
     dream_cycle  = DreamCycle(svi)
@@ -450,17 +493,17 @@ if __name__ == "__main__":
     print("\n[PHASE 3A] Simulating waking day — logging anomalies...\n")
 
     WAKING_SCENARIOS = [
-        {"temp": 46.0, "vram_usage": 23.1},
-        {"temp": 46.5, "vram_usage": 23.3},
-        {"temp": 46.0, "vram_usage": 23.0},
-        {"temp": 62.0, "vram_usage": 41.0},   # Crisis 1
-        {"temp": 65.0, "vram_usage": 44.0},   # Crisis 1 escalating
-        {"temp": 63.5, "vram_usage": 42.5},   # Crisis 1 sustained
-        {"temp": 47.0, "vram_usage": 24.0},   # Recovery
-        {"temp": 46.5, "vram_usage": 23.5},
-        {"temp": 68.0, "vram_usage": 48.0},   # Crisis 2 — novel pattern
-        {"temp": 70.0, "vram_usage": 50.0},   # Crisis 2 escalating
-        {"temp": 46.0, "vram_usage": 23.0},   # End of day
+        {"slp_heartbeat": 8.1, "sensory_flux": 6.5},
+        {"slp_heartbeat": 8.2, "sensory_flux": 6.6},
+        {"slp_heartbeat": 8.0, "sensory_flux": 6.4},
+        {"slp_heartbeat": 10.0, "sensory_flux": 0.0},   # Vampire Drain Crisis 1
+        {"slp_heartbeat": 10.5, "sensory_flux": 0.0},   # Vampire Drain Crisis 1 escalating
+        {"slp_heartbeat": 10.2, "sensory_flux": 0.0},   # Vampire Drain Crisis 1 sustained
+        {"slp_heartbeat": 8.3, "sensory_flux": 6.7},    # Recovery
+        {"slp_heartbeat": 8.1, "sensory_flux": 6.5},
+        {"slp_heartbeat": 12.0, "sensory_flux": 0.0},   # Vampire Drain Crisis 2
+        {"slp_heartbeat": 12.5, "sensory_flux": 0.0},   # Vampire Drain Crisis 2 escalating
+        {"slp_heartbeat": 8.0, "sensory_flux": 6.4},    # End of day
     ]
 
     for tick, telemetry in enumerate(WAKING_SCENARIOS):
@@ -492,8 +535,17 @@ if __name__ == "__main__":
     # Wake report
     final_snapshot = extract_belief_snapshot(svi, svi_state)
     print(f"\n[WAKE] Agent returned from Dream Cycle.")
-    print(f"  Thermal belief: μ={final_snapshot['beliefs']['true_thermal']['mu']:.4f}°C  "
-          f"σ={final_snapshot['beliefs']['true_thermal']['sigma']:.4f}")
+    print(f"  Desire belief: μ={final_snapshot['beliefs']['innate_desire']['mu']:.4f}  "
+          f"σ={final_snapshot['beliefs']['innate_desire']['sigma']:.4f}")
     print(f"  EIG (curiosity):  {final_snapshot['eig']:.4f}")
     print(f"  Arena: {agent.arena}")
+    
+    # Generative Bypass Simulation
+    print("\n" + "─" * 60)
+    print("[PHASE 3C] Generative Bypass Dream (Z3 + LLM Simulation)")
+    print("─" * 60)
+    
+    sandbox = SandboxSimulationArena(svi, dream_cycle.relaxation)
+    bypass_result = sandbox.simulate_generative_bypass(initial_fe=758.26)
+    
     print(f"\n[ENGINE] Phase 3 complete. Agent ready for Phase 4 (Swarm).\n")

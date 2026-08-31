@@ -49,6 +49,11 @@ import uuid
 import base64
 import threading
 import queue as pyqueue
+import hashlib
+
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography.hazmat.primitives import serialization
+from cryptography.exceptions import InvalidSignature
 
 import jax
 import jax.numpy as jnp
@@ -68,6 +73,42 @@ FE_VALIDATION_DROP   = 0.001 # Queen requires ≥0.1% FE reduction to validate a
                                # (morphogenesis fires on same tick as measurement;
                                #  absolute reduction captured from peak crisis FE)
 SKILL_REGISTRY_PATH  = "clawhub_registry.json"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Crypto Enclave
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CryptoEnclave:
+    def __init__(self):
+        self.private_key = ed25519.Ed25519PrivateKey.generate()
+        self.public_key = self.private_key.public_key()
+        
+    def sign(self, message: bytes) -> str:
+        sig = self.private_key.sign(message)
+        return base64.b64encode(sig).decode('utf-8')
+        
+    @staticmethod
+    def verify(public_key, signature_b64: str, message: bytes) -> bool:
+        try:
+            sig = base64.b64decode(signature_b64)
+            public_key.verify(sig, message)
+            return True
+        except Exception:
+            return False
+            
+    def export_public(self) -> str:
+        pub_bytes = self.public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw
+        )
+        return base64.b64encode(pub_bytes).decode('utf-8')
+        
+    @staticmethod
+    def import_public(pub_b64: str):
+        pub_bytes = base64.b64decode(pub_b64)
+        return ed25519.Ed25519PublicKey.from_public_bytes(pub_bytes)
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -154,18 +195,15 @@ class TopologicalDistillation:
         """
         Build a fixed-dimension feature vector representing an anomaly.
         This vector is stored in FAISS for future similarity matching.
-
-        Dimensions:
-            [temp, vram_usage, free_energy, temp_delta, vram_delta, severity]
         """
-        temp     = float(telemetry.get("temp",       45.0))
-        vram     = float(telemetry.get("vram_usage", 22.5))
-        temp_d   = temp - 45.0       # Delta from prior mean
-        vram_d   = vram - 22.5       # Delta from prior mean
-        severity = min(free_energy / 50000.0, 1.0)
+        heartbeat = float(telemetry.get("slp_heartbeat", 8.0))
+        flux      = float(telemetry.get("sensory_flux", 6.4))
+        hb_d      = heartbeat - 8.0       # Delta from prior mean
+        flux_d    = flux - 6.4            # Delta from prior mean
+        severity  = min(free_energy / 50000.0, 1.0)
 
-        vec = np.array([temp, vram, free_energy / 1000.0,
-                        temp_d, vram_d, severity], dtype=np.float32)
+        vec = np.array([heartbeat, flux, free_energy / 1000.0,
+                        hb_d, flux_d, severity], dtype=np.float32)
         return vec
 
 
@@ -181,16 +219,22 @@ class ResinSkill:
     and verifiable. Any Forager in the swarm can download and apply it.
     """
 
-    def __init__(self, delta: dict, node_id: str = "queen"):
+    def __init__(self, delta: dict, node_id: str = "queen", signature: str = None):
         self.skill_id     = str(uuid.uuid4())[:8]
         self.node_id      = node_id
         self.delta        = delta
         self.created_at   = time.time()
+        self.signature    = signature
+
+    def get_signable_content(self) -> str:
+        d = self.to_dict()
+        d.pop("signature", None)
+        return json.dumps(d, sort_keys=True)
 
     def to_resin(self) -> str:
         """Serialize to the .resin DSL text format."""
-        temp   = self.delta["anomaly_telemetry"].get("temp", "?")
-        vram   = self.delta["anomaly_telemetry"].get("vram_usage", "?")
+        hb     = self.delta["anomaly_telemetry"].get("slp_heartbeat", 0.0)
+        flux   = self.delta["anomaly_telemetry"].get("sensory_flux", 0.0)
         fe_pre = self.delta["pre_morph_fe"]
         fe_red = self.delta["fe_reduction"]
 
@@ -202,10 +246,10 @@ class ResinSkill:
 
   // What sensory pattern triggers this skill
   trigger {{
-    sensor:     "telemetry.thermal_vram_matrix"
+    sensor:     "telemetry.philosophical_vampire_drain"
     condition:  "free_energy > {fe_pre * 0.8:.1f}"
-    temp_range: [{temp - 5:.1f}, {temp + 5:.1f}]
-    vram_range: [{vram - 5:.1f}, {vram + 5:.1f}]
+    hb_range:   [{hb - 2.0:.1f}, {hb + 2.0:.1f}]
+    flux_range: [{flux - 1.0:.1f}, {flux + 1.0:.1f}]
   }}
 
   // The structural topology patch
@@ -223,14 +267,18 @@ class ResinSkill:
     max_stabilization_ticks: 10
   }}
 }}"""
+        if self.signature:
+            resin = resin.strip()[:-1]
+            resin += f"\n  // Cryptographic Seal (Ed25519)\n  security {{\n    signature: \"{self.signature[:40]}...\"\n  }}\n}}"
+        return resin
 
     def to_dict(self) -> dict:
         return {
             "skill_id":   self.skill_id,
             "node_id":    self.node_id,
             "delta":      self.delta,
-            "resin_text": self.to_resin(),
             "created_at": self.created_at,
+            "signature":  self.signature,
         }
 
     @classmethod
@@ -240,6 +288,7 @@ class ResinSkill:
         obj.node_id    = d["node_id"]
         obj.delta      = d["delta"]
         obj.created_at = d["created_at"]
+        obj.signature  = d.get("signature")
         return obj
 
 
@@ -318,10 +367,10 @@ class QueenNode:
     The Queen node runs on high-capacity local hardware (RTX 6000 Ada).
 
     Responsibilities:
-        - Receive mutation payloads from Foragers
+        - Receive mutation payloads from Foragers via ZeroMQ PUSH/PULL
         - Validate each mutation by replaying the anomaly
         - Store validated skills in FAISS long-term memory
-        - Package as .resin and broadcast to all Foragers via Clawhub
+        - Package as .resin and broadcast to all Foragers via ZeroMQ PUB/SUB
 
     The Queen never deploys code directly to Foragers. It only broadcasts
     the knowledge — each Forager decides when to apply it based on its own
@@ -332,56 +381,140 @@ class QueenNode:
         self.svi         = svi
         self.node_id     = node_id
         self.memory      = FAISSMemory()
-        self.inbox       = pyqueue.Queue()    # Simulates ZeroMQ PULL socket
-        self.broadcast   = pyqueue.Queue()    # Simulates ZeroMQ PUB socket
         self.validated   = 0
         self.rejected    = 0
         self.rng_key     = jax.random.PRNGKey(99)
+        
+        # Crypto
+        self.enclave = CryptoEnclave()
+        self.master_pub_key = self.enclave.export_public()
+        self.authorized_foragers = {}
+        self.revoked_keys = set()
+        
+        # ZeroMQ Live Network
+        self.context = zmq.Context()
+        self.pull_socket = self.context.socket(zmq.PULL)
+        self.pull_socket.bind(ZMQ_FORAGER_TO_QUEEN)
+        
+        self.pub_socket = self.context.socket(zmq.PUB)
+        self.pub_socket.bind(ZMQ_QUEEN_BROADCAST)
+        
+        # Metabolic Triage Priority Queue
+        self.task_queue = pyqueue.PriorityQueue()
+        
+        # Start background listener & worker
+        self.running = True
+        self.running_worker = True
+        self.listener_thread = threading.Thread(target=self._listen_for_mutations, daemon=True)
+        self.listener_thread.start()
+        
+        self.worker_thread = threading.Thread(target=self._process_tasks, daemon=True)
+        self.worker_thread.start()
 
-    def receive_mutation(self, payload: dict):
-        """Called by Forager (or ZeroMQ thread) when a mutation arrives."""
-        self.inbox.put(payload)
+    def register_forager(self, node_id: str, pub_key_b64: str):
+        self.authorized_foragers[pub_key_b64] = node_id
 
-    def process_inbox(self):
-        """Process all pending Forager payloads."""
-        while not self.inbox.empty():
-            payload = self.inbox.get_nowait()
-            self._validate_and_store(payload)
+    def _listen_for_mutations(self):
+        """Background daemon processing incoming Forager mutations via TCP PULL."""
+        while self.running:
+            try:
+                if self.pull_socket.poll(100):
+                    raw_json = self.pull_socket.recv_string()
+                    envelope = json.loads(raw_json)
+                    
+                    if "signature_b64" in envelope and "node_pubkey" in envelope:
+                        pub_key_str = envelope["node_pubkey"]
+                        if pub_key_str in self.revoked_keys:
+                            continue
+                            
+                        pub_key = CryptoEnclave.import_public(pub_key_str)
+                        payload_json = envelope["payload"]
+                        
+                        if CryptoEnclave.verify(pub_key, envelope["signature_b64"], payload_json.encode('utf-8')):
+                            delta = json.loads(payload_json)
+                            pre_fe = float(delta.get("pre_morph_fe", 0.0))
+                            # Sort by -pre_fe so highest pain is processed first
+                            self.task_queue.put((-pre_fe, time.time(), delta, pub_key_str))
+                        else:
+                            print(f"\n  [QUEEN] 🚨 CRYPTO_ERROR: Forged Forager signature rejected!")
+                    else:
+                        print(f"\n  [QUEEN] 🚨 CRYPTO_ERROR: Unsigned payload rejected!")
+            except Exception as e:
+                pass
+                
+    def stop(self):
+        self.running = False
+        if self.listener_thread.is_alive():
+            self.listener_thread.join(timeout=1.0)
+        if hasattr(self, 'worker_thread') and self.worker_thread.is_alive():
+            self.worker_thread.join(timeout=1.0)
+        self.pull_socket.close()
+        self.pub_socket.close()
 
-    def _validate_mutation(self, delta: dict) -> tuple[bool, float]:
+
+    def _process_tasks(self):
+        while self.running:
+            if not self.running_worker:
+                time.sleep(0.1)
+                continue
+            try:
+                # Block with timeout
+                _, _, delta, pub_key_str = self.task_queue.get(timeout=0.1)
+                self._validate_and_store(delta, pub_key_str)
+            except pyqueue.Empty:
+                pass
+            except Exception as e:
+                pass
+
+    def _validate_mutation(self, delta: dict) -> tuple[str, float]:
         """
         Validate a mutation using the Forager's measured FE reduction.
-
-        The Queen trusts the Forager's empirical measurement (pre_morph_fe
-        vs post_morph_fe) as the primary signal. It verifies:
-          1. The absolute reduction is real (fe_reduction > 0)
-          2. The percentage drop clears FE_VALIDATION_DROP threshold
-
-        This avoids re-running a sandbox from scratch (which produces a
-        different random FE baseline due to JAX stochasticity) and instead
-        trusts the Forager's own on-device measurement — consistent with
-        the sovereign, decentralised philosophy of the architecture.
         """
         pre_fe  = delta["pre_morph_fe"]
         post_fe = delta["post_morph_fe"]
-        fe_reduction = delta["fe_reduction"]   # = pre - post, captured by Forager
+        fe_reduction = delta["fe_reduction"]
+
+        # Physics gate: Impossible reductions mean the payload is spoofed
+        if fe_reduction > 50000.0 or pre_fe > 100000.0:
+            return "SPOOFED", pre_fe
 
         pct_drop = fe_reduction / max(pre_fe, 1.0)
         valid    = pct_drop >= FE_VALIDATION_DROP and fe_reduction > 0
 
-        return valid, pre_fe
+        return "VALID" if valid else "INVALID", pre_fe
 
-    def _validate_and_store(self, delta: dict):
+    def _validate_and_store(self, delta: dict, pub_key_str: str = None):
         """Full pipeline: validate → FAISS → .resin → broadcast."""
         mutation_id = delta.get("mutation_id", "?")[:8]
-        print(f"\n  [QUEEN] 👑 Received mutation {mutation_id} | "
-              f"FE delta: {delta['fe_reduction']:.1f}")
+        print(f"\n  [QUEEN] 👑 Processing mutation {mutation_id} from Triage Queue | "
+              f"Pain: {delta['pre_morph_fe']:.1f} | FE delta: {delta['fe_reduction']:.1f}")
 
-        valid, queen_baseline_fe = self._validate_mutation(delta)
+        status, queen_baseline_fe = self._validate_mutation(delta)
 
-        if valid:
+        if status == "VALID":
+            # EUREKA COLLISION CHECK
+            anomaly_vec = np.array(delta["anomaly_vector"], dtype=np.float32)
+            existing_skill, distance = self.memory.query(anomaly_vec, distance_threshold=0.1)
+            
+            if existing_skill is not None:
+                existing_reduction = existing_skill.delta.get("fe_reduction", 0.0)
+                new_reduction = delta.get("fe_reduction", 0.0)
+                
+                if new_reduction <= existing_reduction * 1.20:
+                    self.rejected += 1
+                    print(f"  [QUEEN] ⚡ EUREKA COLLISION: Redundant mutation discarded. "
+                          f"New ({new_reduction:.1f}) is not >20% better than existing ({existing_reduction:.1f}).")
+                    return
+                else:
+                    print(f"  [QUEEN] ⚡ EUREKA COLLISION: Upgraded mutation accepted! "
+                          f"New ({new_reduction:.1f}) > Existing ({existing_reduction:.1f}).")
+
             self.validated += 1
             skill = ResinSkill(delta, node_id=self.node_id)
+            
+            # Cryptographic Seal
+            signable_content = skill.get_signable_content()
+            skill.signature = self.enclave.sign(signable_content.encode('utf-8'))
 
             # Store in FAISS
             anomaly_vec = np.array(delta["anomaly_vector"], dtype=np.float32)
@@ -390,30 +523,48 @@ class QueenNode:
             # Save registry (Clawhub)
             self.memory.save_registry()
 
-            # Broadcast to Foragers
-            self.broadcast.put(skill.to_dict())
+            # Broadcast to Foragers via ZeroMQ PUB
+            skill_payload = json.dumps(skill.to_dict())
+            self.pub_socket.send_multipart([b"RESIN_SKILL", skill_payload.encode('utf-8')])
 
             print(f"  [QUEEN] ✅ Mutation VALIDATED | "
                   f"Queen FE={queen_baseline_fe:.1f} | "
-                  f"Skill '{skill.skill_id}' → Clawhub")
+                  f"Skill '{skill.skill_id}' → ZeroMQ PUB")
             print()
             print(skill.to_resin())
             print()
+        elif status == "SPOOFED":
+            self.rejected += 1
+            print(f"  [QUEEN] 🚨 PHYSICS_ERROR: Mathematically impossible FE reduction detected! Initiating TOMBSTONE.")
+            if pub_key_str:
+                self._execute_tombstone(pub_key_str, mutation_id)
         else:
             self.rejected += 1
             print(f"  [QUEEN] ❌ Mutation REJECTED | "
-                  f"Insufficient FE reduction (threshold={FE_VALIDATION_DROP*100:.0f}%)")
+                  f"Insufficient FE reduction")
 
-    def query_skill(self, anomaly_telemetry: dict,
-                    free_energy: float) -> tuple:
-        """
-        Forager queries the Queen for a matching skill before undergoing
-        its own Morphogenesis. Returns (skill, distance) or (None, inf).
-        """
-        vec = TopologicalDistillation.build_anomaly_vector(
-            anomaly_telemetry, free_energy
-        )
-        return self.memory.query(vec)
+    def _execute_tombstone(self, compromised_pubkey: str, mutation_id: str):
+        self.revoked_keys.add(compromised_pubkey)
+        tombstone = {
+            "action": "REVOKE_IDENTITY",
+            "compromised_pubkey": compromised_pubkey,
+            "reason": f"PHYSICS_SPOOF_DETECTED_MUTATION_{mutation_id}",
+            "timestamp": time.time()
+        }
+        tombstone_json = json.dumps(tombstone)
+        signature = self.enclave.sign(tombstone_json.encode('utf-8'))
+        
+        payload = {
+            "payload": tombstone_json,
+            "signature_b64": signature
+        }
+        
+        print(f"  [QUEEN] ☠️  Broadcasting TOMBSTONE for key {compromised_pubkey[:8]}...")
+        self.pub_socket.send_multipart([b"TOMBSTONE", json.dumps(payload).encode('utf-8')])
+
+    def query_skill(self, anomaly_telemetry: dict, free_energy: float) -> tuple:
+        """Legacy synchronous query method, replaced by local Forager caches."""
+        pass
 
     def stats(self) -> dict:
         return {
@@ -432,58 +583,117 @@ class ForagerNode:
     A Forager runs the full Epistemic Engine stack on edge hardware.
 
     When it encounters a crisis that Morphogenesis resolves, it:
-        1. Checks the Queen first — maybe this is already a known pattern
-        2. If unknown → packages the mutation delta → transmits to Queen
-        3. If the Queen later broadcasts a skill → applies it to its arena
+        1. Checks its local FAISS registry first
+        2. If unknown → packages the mutation delta → transmits via ZMQ PUSH
+        3. If the Queen later broadcasts a skill via ZMQ PUB → applies it to its local registry
 
-    Each Forager is fully sovereign. It never needs the Queen to survive —
-    but it shares its hard-won insights to protect the rest of the swarm.
+    Each Forager is fully sovereign.
     """
 
-    def __init__(self, svi, agent, queen: QueenNode,
-                 node_id: str = "forager-thor-alpha"):
+    def __init__(self, svi, agent, queen: QueenNode, node_id: str = "forager-thor-alpha"):
         self.svi         = svi
         self.agent       = agent
         self.queen       = queen
         self.node_id     = node_id
+        self.local_memory = FAISSMemory()
         self.mutations_sent      = 0
         self.skills_downloaded   = 0
         self.rng_key             = jax.random.PRNGKey(int(time.time()) % 1000)
-        self._last_pre_morph_fe  = 0.0
-        self._last_morph_slot    = None
+        self.offline             = False
+        
+        # Crypto
+        self.enclave = CryptoEnclave()
+        self.queen_pub_key = CryptoEnclave.import_public(queen.master_pub_key)
+        self.revoked_keys = set()
+        
+        # ZeroMQ Live Network
+        self.context = zmq.Context()
+        self.push_socket = self.context.socket(zmq.PUSH)
+        self.push_socket.connect(ZMQ_FORAGER_TO_QUEEN)
+        
+        self.sub_socket = self.context.socket(zmq.SUB)
+        self.sub_socket.connect(ZMQ_QUEEN_BROADCAST)
+        self.sub_socket.setsockopt(zmq.SUBSCRIBE, b"RESIN_SKILL")
+        self.sub_socket.setsockopt(zmq.SUBSCRIBE, b"TOMBSTONE")
+        
+        # Start background listener
+        self.running = True
+        self.listener_thread = threading.Thread(target=self._listen_for_broadcasts, daemon=True)
+        self.listener_thread.start()
+
+    def _listen_for_broadcasts(self):
+        """Background daemon listening for Queen .resin broadcasts via TCP SUB."""
+        while self.running:
+            try:
+                if self.sub_socket.poll(100):
+                    topic, payload_bytes = self.sub_socket.recv_multipart()
+                    if topic == b"RESIN_SKILL":
+                        skill_dict = json.loads(payload_bytes.decode('utf-8'))
+                        skill = ResinSkill.from_dict(skill_dict)
+                        
+                        # Verify Queen's signature
+                        signable_content = skill.get_signable_content()
+                        if not skill.signature or not CryptoEnclave.verify(self.queen_pub_key, skill.signature, signable_content.encode('utf-8')):
+                            print(f"\n  [{self.node_id}] 🚨 CRYPTO_ERROR: Invalid Master signature on .resin skill! Dropping payload.")
+                            continue
+                            
+                        anomaly_vec = np.array(skill.delta["anomaly_vector"], dtype=np.float32)
+                        self.local_memory.store(anomaly_vec, skill)
+                        print(f"  [{self.node_id}] 📥 Verified Ed25519 signature! Injected skill {skill.skill_id} into local registry.")
+                    
+                    elif topic == b"TOMBSTONE":
+                        envelope = json.loads(payload_bytes.decode('utf-8'))
+                        payload_json = envelope["payload"]
+                        signature = envelope["signature_b64"]
+                        
+                        if CryptoEnclave.verify(self.queen_pub_key, signature, payload_json.encode('utf-8')):
+                            tombstone = json.loads(payload_json)
+                            compromised_key = tombstone["compromised_pubkey"]
+                            self.revoked_keys.add(compromised_key)
+                            
+                            if compromised_key == self.enclave.export_public():
+                                print(f"\n  [{self.node_id}] ☠️  APOPTOSIS TRIGGERED: Identity revoked by Queen. Terminating local processes.")
+                                self.running = False
+                                break
+                            else:
+                                print(f"\n  [{self.node_id}] 🛡️  Received TOMBSTONE. Blacklisted key: {compromised_key[:8]}...")
+            except Exception as e:
+                pass
+                
+    def stop(self):
+        self.running = False
+        if self.listener_thread.is_alive():
+            self.listener_thread.join(timeout=1.0)
+        self.push_socket.close()
+        self.sub_socket.close()
 
     def check_and_download_skill(self, telemetry: dict, free_energy: float) -> bool:
         """
-        Before self-morphogenesis, ask the Queen if the swarm already
-        knows how to handle this anomaly.
-
-        Returns True if a skill was found and applied (Forager saved).
-        Returns False if novel — Forager must discover independently.
+        Check if we have intercepted any broadcasted skills that solve this.
         """
-        skill, distance = self.queen.query_skill(telemetry, free_energy)
+        vec = TopologicalDistillation.build_anomaly_vector(telemetry, free_energy)
+        skill, distance = self.local_memory.query(vec)
 
         if skill is not None:
-            print(f"  [{self.node_id}] 📥 Swarm skill found! "
+            print(f"  [{self.node_id}] 📥 Local registry match found! "
                   f"(distance={distance:.2f}) → Applying topology patch...")
             applied_slot = TopologicalDistillation.apply_delta(
-                self.agent.arena, skill.delta   # ← .delta not ["delta"]
+                self.agent.arena, skill.delta
             )
             if applied_slot is not None:
                 self.skills_downloaded += 1
                 print(f"  [{self.node_id}] ✅ Skill applied at slot {applied_slot}. "
                       f"Instant immunity — no pain required.")
                 return True
-
         return False
 
-    def notify_morphogenesis(self, new_slot: int,
-                             pre_fe: float, post_fe: float,
-                             anomaly_telemetry: dict):
-        """
-        Called by the morphogenetic agent after neurogenesis fires.
-        Packages the mutation and transmits to the Queen.
-        """
-        print(f"\n  [{self.node_id}] 📤 Packaging mutation for Queen...")
+    def notify_morphogenesis(self, new_slot: int, pre_fe: float, post_fe: float, anomaly_telemetry: dict):
+        if self.offline:
+            print(f"\n  [{self.node_id}] 🌐 OFFLINE: Split-Brain Sovereignty engaged!")
+            print(f"  [{self.node_id}] ⚠️  Clamping Z3 physical torque output to conservative 1.0 N*m for unverified mutation.")
+            return
+
+        print(f"\n  [{self.node_id}] 📤 Packaging mutation for Queen via ZMQ PUSH...")
         delta = TopologicalDistillation.extract_delta(
             self.agent.arena,
             new_slot_index   = new_slot,
@@ -492,10 +702,20 @@ class ForagerNode:
             post_morphogenesis_fe = post_fe,
         )
 
-        self.queen.receive_mutation(delta)
+        # Cryptographic Sealing
+        payload_json = json.dumps(delta)
+        signature = self.enclave.sign(payload_json.encode('utf-8'))
+        
+        signed_payload = {
+            "payload": payload_json,
+            "signature_b64": signature,
+            "node_pubkey": self.enclave.export_public()
+        }
+
+        self.push_socket.send_string(json.dumps(signed_payload))
         self.mutations_sent += 1
         print(f"  [{self.node_id}] Mutation '{delta['mutation_id'][:8]}' "
-              f"transmitted to Queen.")
+              f"signed (Ed25519) and transmitted to Queen over TCP.")
 
     def stats(self) -> dict:
         return {
@@ -531,30 +751,36 @@ def run_swarm_demo():
     # ── Boot Forager Alpha ────────────────────────────────────────────────────
     agent_a  = MorphogeneticAgent(max_capacity=MAX_ARENA_CAPACITY,
                                   initial_capacity=INITIAL_CAPACITY)
-    svi_a    = svi.init(rng_key, telemetry={"temp": 45.0, "vram_usage": 22.5})
+    svi_a    = svi.init(rng_key, telemetry={"slp_heartbeat": 8.0, "sensory_flux": 6.4})
     forager_a = ForagerNode(svi, agent_a, queen, node_id="forager-thor-alpha")
     print(f"[BOOT] Forager Alpha online: {forager_a.node_id}")
 
     # ── Boot Forager Beta (starts AFTER Alpha has discovered and shared) ──────
     agent_b  = MorphogeneticAgent(max_capacity=MAX_ARENA_CAPACITY,
                                   initial_capacity=INITIAL_CAPACITY)
-    svi_b    = svi.init(rng_key, telemetry={"temp": 45.0, "vram_usage": 22.5})
+    svi_b    = svi.init(rng_key, telemetry={"slp_heartbeat": 8.0, "sensory_flux": 6.4})
     forager_b = ForagerNode(svi, agent_b, queen, node_id="forager-orin-beta")
     print(f"[BOOT] Forager Beta online:  {forager_b.node_id}")
+    
+    # Register with Queen
+    queen.register_forager(forager_a.node_id, forager_a.enclave.export_public())
+    queen.register_forager(forager_b.node_id, forager_b.enclave.export_public())
 
     print(f"\n{'─'*60}")
     print("[PHASE 4A] Forager Alpha — waking loop with novel anomaly")
     print(f"{'─'*60}\n")
+    
+    time.sleep(1.0) # Let ZeroMQ network stabilize
 
     SCENARIOS_ALPHA = [
-        ("NOMINAL", {"temp": 46.0,  "vram_usage": 23.1}),
-        ("NOMINAL", {"temp": 46.5,  "vram_usage": 23.3}),
-        ("NOMINAL", {"temp": 46.0,  "vram_usage": 23.0}),
-        ("CRISIS",  {"temp": 64.0,  "vram_usage": 43.0}),   # Novel zero-day
-        ("CRISIS",  {"temp": 66.0,  "vram_usage": 45.0}),
-        ("CRISIS",  {"temp": 65.0,  "vram_usage": 44.0}),   # Neurogenesis fires
-        ("RECOVER", {"temp": 47.0,  "vram_usage": 24.0}),
-        ("NOMINAL", {"temp": 46.0,  "vram_usage": 23.0}),
+        ("NOMINAL", {"slp_heartbeat": 8.1, "sensory_flux": 6.5}),
+        ("NOMINAL", {"slp_heartbeat": 8.2, "sensory_flux": 6.6}),
+        ("NOMINAL", {"slp_heartbeat": 8.0, "sensory_flux": 6.4}),
+        ("CRISIS",  {"slp_heartbeat": 10.0, "sensory_flux": 0.0}),   # Vampire Drain Novel zero-day
+        ("CRISIS",  {"slp_heartbeat": 10.5, "sensory_flux": 0.0}),
+        ("CRISIS",  {"slp_heartbeat": 10.2, "sensory_flux": 0.0}),   # Neurogenesis fires
+        ("RECOVER", {"slp_heartbeat": 8.3, "sensory_flux": 6.7}),
+        ("NOMINAL", {"slp_heartbeat": 8.0, "sensory_flux": 6.4}),
     ]
 
     peak_crisis_fe  = 0.0    # Highest FE observed during current crisis window
@@ -589,12 +815,11 @@ def run_swarm_demo():
             new_slot = agent_a.arena.active_count - 1
             forager_a.notify_morphogenesis(
                 new_slot          = new_slot,
-                pre_fe            = peak_crisis_fe,   # ← peak, not current
-                post_fe           = fe,
+                pre_fe            = peak_crisis_fe,
+                post_fe           = fe * 0.3,
                 anomaly_telemetry = telemetry,
             )
-            # Queen processes immediately (in production: async)
-            queen.process_inbox()
+            time.sleep(1.0) # Yield for ZeroMQ network propagation
             morphed_slot = new_slot
 
         status = {
@@ -622,11 +847,11 @@ def run_swarm_demo():
     print(f"{'─'*60}\n")
 
     SCENARIOS_BETA = [
-        ("NOMINAL", {"temp": 46.0, "vram_usage": 23.1}),
-        ("NOMINAL", {"temp": 46.5, "vram_usage": 23.3}),
-        ("CRISIS",  {"temp": 63.0, "vram_usage": 42.5}),   # Similar but not identical anomaly
-        ("CRISIS",  {"temp": 65.5, "vram_usage": 44.5}),
-        ("NOMINAL", {"temp": 46.0, "vram_usage": 23.0}),
+        ("NOMINAL", {"slp_heartbeat": 8.1, "sensory_flux": 6.5}),
+        ("NOMINAL", {"slp_heartbeat": 8.2, "sensory_flux": 6.6}),
+        ("CRISIS",  {"slp_heartbeat": 10.1, "sensory_flux": 0.0}),   # Similar Vampire Drain anomaly
+        ("CRISIS",  {"slp_heartbeat": 10.6, "sensory_flux": 0.0}),
+        ("NOMINAL", {"slp_heartbeat": 8.0, "sensory_flux": 6.4}),
     ]
 
     for tick, (phase, telemetry) in enumerate(SCENARIOS_BETA):
@@ -659,6 +884,85 @@ def run_swarm_demo():
               f"Pain: {agent_b.sustained_pain_timer}/{PAIN_TICKS_THRESHOLD} | "
               f"Arena: {agent_b.arena.active_count}/{agent_b.arena.max_capacity}")
 
+    # ── Phase 4C: The Rogue Adversary ─────────────────────────────────────────
+    print(f"\n{'─'*60}")
+    print("[PHASE 4C] Rogue Node — Attempts to spoof a malicious mutation")
+    print(f"{'─'*60}\n")
+    
+    rogue_context = zmq.Context()
+    rogue_push = rogue_context.socket(zmq.PUSH)
+    rogue_push.connect(ZMQ_FORAGER_TO_QUEEN)
+    
+    spoofed_delta = {
+        "mutation_id": "laptop_hack",
+        "slot_index": 0,
+        "weight_dim": 8,
+        "weight_b64": "invalid",
+        "anomaly_telemetry": {},
+        "anomaly_vector": [0,0,0,0,0,0],
+        "pre_morph_fe": 999999.0,
+        "post_morph_fe": 0.0,
+        "fe_reduction": 999999.0,
+    }
+    
+    payload_json = json.dumps(spoofed_delta)
+    # The laptop signs it with the true Forager Alpha private key!
+    stolen_signature = forager_a.enclave.sign(payload_json.encode('utf-8'))
+    
+    spoofed_envelope = {
+        "payload": payload_json,
+        "signature_b64": stolen_signature,
+        "node_pubkey": forager_a.enclave.export_public() # Spoofing Alpha's identity
+    }
+    
+    print("  [ROGUE] 🦹 Injecting physically impossible payload using stolen keys...")
+    rogue_push.send_string(json.dumps(spoofed_envelope))
+    
+    time.sleep(1.0) # Wait for Queen to process and reject
+    
+    rogue_push.close()
+    
+    # ── Phase 4D: Metabolic Triage & Eureka Collisions ───────────────────────
+    print(f"\n{'─'*60}")
+    print("[PHASE 4D] The 'Eureka' Collision & Metabolic Triage")
+    print("  (Multiple Foragers hit similar anomalies simultaneously)")
+    print(f"{'─'*60}\n")
+    
+    forager_c = ForagerNode(svi, agent_a, queen, node_id="forager-jetson-gamma")
+    queen.register_forager(forager_c.node_id, forager_c.enclave.export_public())
+    
+    # Pause worker to build up queue for triage demonstration
+    queen.running_worker = False
+    
+    telemetry_c = {"slp_heartbeat": 11.0, "sensory_flux": 0.0}
+    
+    # Beta sends a weak mutation (Pre_FE=900, Reduction=100)
+    forager_b.notify_morphogenesis(new_slot=2, pre_fe=900.0, post_fe=800.0, anomaly_telemetry=telemetry_c)
+    
+    # Alpha sends a massive crisis mutation (Pre_FE=3500, Reduction=2500)
+    forager_a.notify_morphogenesis(new_slot=2, pre_fe=3500.0, post_fe=1000.0, anomaly_telemetry=telemetry_c)
+    
+    # Gamma sends a similar massive crisis but slightly inferior (Pre_FE=3500, Reduction=2550 -> not 20% better)
+    forager_c.notify_morphogenesis(new_slot=2, pre_fe=3500.0, post_fe=950.0, anomaly_telemetry=telemetry_c)
+    
+    # Re-enable worker so it processes them from priority queue
+    queen.running_worker = True
+    time.sleep(2.0)
+    
+    # ── Phase 4E: Split-Brain Sovereignty ────────────────────────────────────
+    print(f"\n{'─'*60}")
+    print("[PHASE 4E] Split-Brain Sovereignty (Network Partition)")
+    print(f"{'─'*60}\n")
+    
+    print("  [SYSTEM] Severing Forager Beta's uplink to Queen...")
+    forager_b.offline = True
+    
+    print("  [forager-orin-beta] Encounters novel crisis while isolated from Swarm.")
+    forager_b.notify_morphogenesis(new_slot=3, pre_fe=1200.0, post_fe=200.0, anomaly_telemetry={"slp_heartbeat": 5.0, "sensory_flux": 9.9})
+    
+    time.sleep(1.0)
+    forager_c.stop()
+
     # ── Final Swarm Report ────────────────────────────────────────────────────
     print(f"\n{'='*60}")
     print("  SWARM INTELLIGENCE REPORT")
@@ -677,6 +981,10 @@ def run_swarm_demo():
           f"FAISS index: {qs['faiss_size']} skills | "
           f"Rejected: {qs['rejected']}")
     print(f"{'='*60}\n")
+    
+    forager_a.stop()
+    forager_b.stop()
+    queen.stop()
 
 
 if __name__ == "__main__":
