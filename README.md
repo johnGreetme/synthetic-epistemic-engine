@@ -34,7 +34,7 @@ The **Synthetic Epistemic Engine (SEE)** abandons passive prompt-response mechan
 
 ---
 
-## How It Works: The 4-Stage Cognitive Loop
+### How We Solved It: The 4-Stage Cognitive Loop
 
 ```text
   ┌────────────────────────────────────────────────────────────────────────┐
